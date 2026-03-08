@@ -7,7 +7,7 @@
  * 技术契约要求：必须拆分子组件，这里只做组合和状态传递
  */
 
-import { useState, useCallback, useMemo } from "react"
+import { useState, useCallback, useMemo, useRef, useEffect } from "react"
 import { ArrowLeft, Settings, Share2 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -35,18 +35,69 @@ interface PodcastPlayerPageProps {
   audioId: string
 }
 
+// 示例音频 URL - 使用公开的 podcast 音频
+const DEMO_AUDIO_URL = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+
 export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
   // ============================================
   // 状态管理 - 后续接入 Zustand
   // ============================================
 
+  const audioRef = useRef<HTMLAudioElement>(null)
+
   // TODO: 此处应调用 usePlayerStore 获取播放状态与当前音频
   const [playerState, setPlayerState] = useState<PlayerState>({
-    currentTime: 52,
-    duration: 2400, // 40 minutes
+    currentTime: 0,
+    duration: 0,
     isPlaying: false,
     playbackRate: 1,
   })
+
+  // 音频事件处理
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+
+    const handleTimeUpdate = () => {
+      setPlayerState((prev) => ({
+        ...prev,
+        currentTime: audio.currentTime,
+      }))
+    }
+
+    const handleLoadedMetadata = () => {
+      setPlayerState((prev) => ({
+        ...prev,
+        duration: audio.duration,
+      }))
+    }
+
+    const handlePlay = () => {
+      setPlayerState((prev) => ({ ...prev, isPlaying: true }))
+    }
+
+    const handlePause = () => {
+      setPlayerState((prev) => ({ ...prev, isPlaying: false }))
+    }
+
+    const handleEnded = () => {
+      setPlayerState((prev) => ({ ...prev, isPlaying: false, currentTime: 0 }))
+    }
+
+    audio.addEventListener("timeupdate", handleTimeUpdate)
+    audio.addEventListener("loadedmetadata", handleLoadedMetadata)
+    audio.addEventListener("play", handlePlay)
+    audio.addEventListener("pause", handlePause)
+    audio.addEventListener("ended", handleEnded)
+
+    return () => {
+      audio.removeEventListener("timeupdate", handleTimeUpdate)
+      audio.removeEventListener("loadedmetadata", handleLoadedMetadata)
+      audio.removeEventListener("play", handlePlay)
+      audio.removeEventListener("pause", handlePause)
+      audio.removeEventListener("ended", handleEnded)
+    }
+  }, [])
 
   // TODO: 此处应调用 useHotzoneStore 获取当前 audio_id 的 hotzones
   const [hotzones, setHotzones] = useState<Hotzone[]>(
@@ -76,22 +127,31 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
 
   // onSeek(time: number): void
   const handleSeek = useCallback((time: number) => {
-    setPlayerState((prev) => ({
-      ...prev,
-      currentTime: Math.max(0, Math.min(time, prev.duration)),
-    }))
+    const audio = audioRef.current
+    if (audio) {
+      const clampedTime = Math.max(0, Math.min(time, audio.duration || Infinity))
+      audio.currentTime = clampedTime
+    }
   }, [])
 
   // onPlayPause(): void
   const handlePlayPause = useCallback(() => {
-    setPlayerState((prev) => ({
-      ...prev,
-      isPlaying: !prev.isPlaying,
-    }))
+    const audio = audioRef.current
+    if (!audio) return
+    
+    if (audio.paused) {
+      audio.play().catch(console.error)
+    } else {
+      audio.pause()
+    }
   }, [])
 
   // onRateChange(rate: number): void
   const handleRateChange = useCallback((rate: number) => {
+    const audio = audioRef.current
+    if (audio) {
+      audio.playbackRate = rate
+    }
     setPlayerState((prev) => ({
       ...prev,
       playbackRate: rate,
@@ -119,10 +179,10 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
 
   // onHotzoneJump(hotzoneId: string, startTime: number): void
   const handleHotzoneJump = useCallback((hotzoneId: string, startTime: number) => {
-    setPlayerState((prev) => ({
-      ...prev,
-      currentTime: startTime,
-    }))
+    const audio = audioRef.current
+    if (audio) {
+      audio.currentTime = startTime
+    }
     setSelectedHotzoneId(hotzoneId)
   }, [])
 
@@ -142,10 +202,10 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
 
   // onWordClick(time: number): void
   const handleWordClick = useCallback((time: number) => {
-    setPlayerState((prev) => ({
-      ...prev,
-      currentTime: time,
-    }))
+    const audio = audioRef.current
+    if (audio) {
+      audio.currentTime = time
+    }
   }, [])
 
   // ============================================
@@ -154,6 +214,14 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
 
   return (
     <div className="flex flex-col h-screen bg-background">
+      {/* Hidden Audio Element */}
+      <audio
+        ref={audioRef}
+        src={DEMO_AUDIO_URL}
+        preload="metadata"
+        className="hidden"
+      />
+
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
         <div className="flex items-center gap-3">
