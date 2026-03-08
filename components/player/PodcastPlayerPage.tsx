@@ -279,6 +279,7 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
               duration={playerState.duration}
               onHotzoneJump={handleHotzoneJump}
               onSeek={handleSeek}
+              isPlaying={playerState.isPlaying}
             />
 
             {/* Controls */}

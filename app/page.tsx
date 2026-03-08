@@ -53,10 +53,16 @@ export default function HomePage() {
             </div>
           </div>
 
-          <nav className="flex items-center gap-2">
+          <nav className="flex items-center gap-1 md:gap-2">
+            <Link
+              href="/discover"
+              className="px-2 md:px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            >
+              Discover
+            </Link>
             <Link
               href="/hotzones"
-              className="px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              className="px-2 md:px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
             >
               Hotzones
             </Link>
