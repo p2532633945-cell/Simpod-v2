@@ -7,30 +7,25 @@
  * 支持点击热区跳转和进度条拖拽
  * 
  * 增强功能：
- * - 动态波形动画（播放时有呼吸效果）
- * - 热区标记（小旗子/光点）
- * - 锚点标记
+ * - 细腻动态波形
+ * - 热区标记（小旗子）
+ * - 锚点标记（光点）
  */
 
 import { useCallback, useRef, useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import type { HotzoneWaveformProps, Hotzone, Anchor } from "@/types/simpod"
 import { formatTime, mockAnchors } from "@/lib/mock-data"
-import { Flag, Bookmark, Circle } from "lucide-react"
+import { Flag } from "lucide-react"
 
-const BAR_COUNT = 80 // 减少数量以便在移动端显示更好
+const BAR_COUNT = 120 // 更多条形使波形更细腻
 
-// 预生成的波形数据 - 避免 hydration 不匹配
-const WAVEFORM_DATA: number[] = [
-  0.65, 0.72, 0.58, 0.81, 0.45, 0.69, 0.77, 0.52, 0.88, 0.41,
-  0.73, 0.66, 0.84, 0.49, 0.71, 0.59, 0.82, 0.47, 0.75, 0.63,
-  0.79, 0.54, 0.86, 0.43, 0.68, 0.76, 0.51, 0.83, 0.46, 0.74,
-  0.61, 0.87, 0.48, 0.72, 0.57, 0.80, 0.44, 0.70, 0.78, 0.53,
-  0.85, 0.42, 0.67, 0.75, 0.50, 0.81, 0.45, 0.73, 0.62, 0.88,
-  0.47, 0.71, 0.56, 0.79, 0.43, 0.69, 0.77, 0.52, 0.84, 0.41,
-  0.66, 0.74, 0.49, 0.80, 0.44, 0.72, 0.61, 0.87, 0.46, 0.70,
-  0.55, 0.78, 0.42, 0.68, 0.76, 0.51, 0.83, 0.40, 0.65, 0.73,
-]
+// 预生成的波形数据
+const WAVEFORM_DATA: number[] = Array.from({ length: BAR_COUNT }, (_, i) => {
+  // 使用固定种子生成伪随机数据
+  const seed = (i * 7919 + 1) % 1000
+  return 0.2 + (seed / 1000) * 0.6
+})
 
 interface ExtendedHotzoneWaveformProps extends HotzoneWaveformProps {
   isPlaying?: boolean
@@ -47,9 +42,14 @@ export function HotzoneWaveform({
   anchors = mockAnchors,
 }: ExtendedHotzoneWaveformProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [hoveredHotzone, setHoveredHotzone] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [showMarkerTooltip, setShowMarkerTooltip] = useState<string | null>(null)
+  const [isMounted, setIsMounted] = useState(false)
+
+  // 确保只在客户端渲染动态内容
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
 
@@ -135,7 +135,7 @@ export function HotzoneWaveform({
   return (
     <div className="flex flex-col gap-2 w-full">
       {/* Markers Row - 热区和锚点标记 */}
-      <div className="relative h-6 w-full">
+      <div className="relative h-5 w-full">
         {/* 热区标记 - 小旗子 */}
         {hotzones.map((hotzone) => {
           const { left } = getHotzonePosition(hotzone)
@@ -155,7 +155,7 @@ export function HotzoneWaveform({
               aria-label={`跳转到热区 ${formatTime(hotzone.start_time)}`}
             >
               <Flag
-                size={16}
+                size={14}
                 className={cn(
                   "transition-colors",
                   isActive
@@ -195,16 +195,11 @@ export function HotzoneWaveform({
             >
               <div
                 className={cn(
-                  "w-2 h-2 rounded-full transition-all",
+                  "w-1.5 h-1.5 rounded-full transition-all",
                   isNearPlayhead
                     ? "bg-simpod-primary shadow-lg"
                     : "bg-simpod-primary/50 hover:bg-simpod-primary"
                 )}
-                style={{
-                  boxShadow: isNearPlayhead
-                    ? "0 0 8px hsl(var(--simpod-primary) / 0.6)"
-                    : undefined,
-                }}
               />
             </button>
           )
@@ -215,18 +210,15 @@ export function HotzoneWaveform({
       <div
         ref={containerRef}
         className={cn(
-          "relative h-16 md:h-20 rounded-xl overflow-hidden cursor-pointer",
-          "bg-secondary/30 border border-border",
+          "relative h-14 md:h-16 rounded-lg overflow-hidden cursor-pointer",
+          "bg-secondary/20",
           "touch-none select-none"
         )}
         onClick={handleWaveformClick}
         onMouseDown={() => setIsDragging(true)}
         onMouseMove={handleMouseMove}
         onMouseUp={() => setIsDragging(false)}
-        onMouseLeave={() => {
-          setIsDragging(false)
-          setHoveredHotzone(null)
-        }}
+        onMouseLeave={() => setIsDragging(false)}
         onTouchStart={() => setIsDragging(true)}
         onTouchMove={handleTouchMove}
         onTouchEnd={() => setIsDragging(false)}
@@ -246,15 +238,26 @@ export function HotzoneWaveform({
               key={`bg-${hotzone.id}`}
               className={cn(
                 "absolute top-0 bottom-0 transition-all duration-300",
-                isActive ? "bg-simpod-mark/15" : "bg-simpod-mark/5"
+                isActive ? "bg-simpod-mark/20" : "bg-simpod-mark/8"
               )}
               style={{ left: `${left}%`, width: `${width}%` }}
-            />
+            >
+              {/* Start line */}
+              <div className={cn(
+                "absolute left-0 top-0 bottom-0 w-px",
+                isActive ? "bg-simpod-mark/60" : "bg-simpod-mark/30"
+              )} />
+              {/* End line */}
+              <div className={cn(
+                "absolute right-0 top-0 bottom-0 w-px",
+                isActive ? "bg-simpod-mark/40" : "bg-simpod-mark/20"
+              )} />
+            </div>
           )
         })}
 
-        {/* Waveform Bars */}
-        <div className="absolute inset-0 flex items-center gap-px px-1">
+        {/* Waveform Lines - 更细的线条 */}
+        <div className="absolute inset-0 flex items-center justify-between px-0.5">
           {WAVEFORM_DATA.map((height, i) => {
             const barPosition = (i / BAR_COUNT) * 100
             const isBeforePlayhead = barPosition <= progress
@@ -263,109 +266,45 @@ export function HotzoneWaveform({
             const barTime = (barPosition / 100) * duration
             const inHotzone = isInHotzone(barTime)
 
-            // 动态动画效果 - 播放时有微小的脉动
-            const animationDelay = (i % 8) * 50
-
             return (
               <div
                 key={i}
                 className={cn(
-                  "flex-1 rounded-full transition-all",
-                  isPlaying ? "duration-150" : "duration-75",
+                  "w-[1px] md:w-[1.5px] rounded-full transition-colors duration-100",
                   isBeforePlayhead
                     ? inHotzone
                       ? "bg-simpod-mark"
-                      : "bg-simpod-primary/70"
+                      : "bg-simpod-primary"
                     : inHotzone
-                      ? "bg-simpod-mark/40"
-                      : "bg-muted-foreground/15"
+                      ? "bg-simpod-mark/30"
+                      : "bg-muted-foreground/20"
                 )}
                 style={{
-                  height: `${Math.round(height * 100)}%`,
-                  transform: isPlaying && isBeforePlayhead
-                    ? `scaleY(${1 + Math.sin(Date.now() / 200 + i) * 0.05})`
-                    : undefined,
-                  transition: isPlaying
-                    ? `all 150ms ease ${animationDelay}ms`
-                    : undefined,
+                  height: `${Math.round(height * 80)}%`,
                 }}
               />
             )
           })}
         </div>
 
-        {/* Hotzone Click Areas */}
-        {hotzones.map((hotzone) => {
-          const { left, width } = getHotzonePosition(hotzone)
-          const isActive = currentHotzone?.id === hotzone.id
-          const isHovered = hoveredHotzone === hotzone.id
-
-          return (
-            <button
-              key={hotzone.id}
-              className="absolute top-0 bottom-0 cursor-pointer"
-              style={{ left: `${left}%`, width: `${width}%` }}
-              onClick={(e) => {
-                e.stopPropagation()
-                onHotzoneJump(hotzone.id, hotzone.start_time)
-              }}
-              onMouseEnter={() => setHoveredHotzone(hotzone.id)}
-              onMouseLeave={() => setHoveredHotzone(null)}
-              aria-label={`热区: ${hotzone.transcript_snippet?.slice(0, 30)}...`}
-            >
-              {/* Hotzone start/end indicators */}
-              <div
-                className={cn(
-                  "absolute top-0 bottom-0 left-0 w-0.5",
-                  "bg-simpod-mark transition-opacity",
-                  isActive || isHovered ? "opacity-100" : "opacity-40"
-                )}
-              />
-              <div
-                className={cn(
-                  "absolute top-0 bottom-0 right-0 w-0.5",
-                  "bg-simpod-mark transition-opacity",
-                  isActive || isHovered ? "opacity-60" : "opacity-20"
-                )}
-              />
-            </button>
-          )
-        })}
-
-        {/* Progress Overlay (played section) */}
-        <div
-          className="absolute top-0 bottom-0 left-0 pointer-events-none"
-          style={{
-            width: `${progress}%`,
-            background: "linear-gradient(90deg, transparent 0%, hsl(var(--simpod-primary) / 0.05) 100%)",
-          }}
-        />
-
         {/* Playhead */}
         <div
-          className={cn(
-            "absolute top-0 bottom-0 w-0.5 pointer-events-none",
-            "bg-simpod-primary transition-all duration-75"
-          )}
-          style={{
-            left: `${progress}%`,
-            boxShadow: currentHotzone
-              ? "0 0 12px hsl(var(--simpod-mark) / 0.8)"
-              : "0 0 8px hsl(var(--simpod-primary) / 0.5)",
-          }}
+          className="absolute top-0 bottom-0 w-0.5 bg-simpod-primary pointer-events-none z-20 transition-[left] duration-75"
+          style={{ left: `${progress}%` }}
         >
-          {/* Playhead top dot */}
+          {/* Playhead glow */}
+          {isMounted && isPlaying && (
+            <div
+              className="absolute inset-0 bg-simpod-primary animate-pulse"
+              style={{ boxShadow: "0 0 8px hsl(var(--simpod-primary) / 0.6)" }}
+            />
+          )}
+          {/* Top indicator */}
           <div
             className={cn(
               "absolute -top-1 left-1/2 -translate-x-1/2",
-              "w-3 h-3 rounded-full",
-              currentHotzone ? "bg-simpod-mark" : "bg-simpod-primary"
+              "w-2 h-2 rounded-full bg-simpod-primary"
             )}
-            style={{
-              boxShadow: currentHotzone
-                ? "0 0 10px hsl(var(--simpod-mark) / 0.6)"
-                : "0 0 8px hsl(var(--simpod-primary) / 0.5)",
-            }}
           />
         </div>
       </div>
@@ -376,18 +315,18 @@ export function HotzoneWaveform({
           {formatTime(currentTime)}
         </span>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-muted-foreground/20" />
-            <span className="text-[10px] text-simpod-muted">Normal</span>
+        <div className="flex items-center gap-3 text-[10px]">
+          <div className="flex items-center gap-1">
+            <div className="w-1 h-3 rounded-full bg-muted-foreground/20" />
+            <span className="text-simpod-muted">Normal</span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             <Flag size={10} className="text-simpod-mark" />
-            <span className="text-[10px] text-simpod-muted">Hotzone</span>
+            <span className="text-simpod-muted">Hotzone</span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             <div className="w-1.5 h-1.5 rounded-full bg-simpod-primary" />
-            <span className="text-[10px] text-simpod-muted">Anchor</span>
+            <span className="text-simpod-muted">Anchor</span>
           </div>
         </div>
 

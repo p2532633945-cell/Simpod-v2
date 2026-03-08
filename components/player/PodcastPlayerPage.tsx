@@ -35,8 +35,8 @@ interface PodcastPlayerPageProps {
   audioId: string
 }
 
-// 示例音频 URL - 使用公开的 podcast 音频
-const DEMO_AUDIO_URL = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+// 示例音频 URL - 使用可靠的公开音频
+const DEMO_AUDIO_URL = "https://www.learningcontainer.com/wp-content/uploads/2020/02/Kalimba.mp3"
 
 export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
   // ============================================
@@ -48,7 +48,7 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
   // TODO: 此处应调用 usePlayerStore 获取播放状态与当前音频
   const [playerState, setPlayerState] = useState<PlayerState>({
     currentTime: 0,
-    duration: 0,
+    duration: 180, // 默认 3 分钟作为 fallback
     isPlaying: false,
     playbackRate: 1,
   })
@@ -84,18 +84,34 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
       setPlayerState((prev) => ({ ...prev, isPlaying: false, currentTime: 0 }))
     }
 
+    const handleCanPlay = () => {
+      console.log("[v0] Audio can play, duration:", audio.duration)
+      setPlayerState((prev) => ({
+        ...prev,
+        duration: audio.duration,
+      }))
+    }
+
+    const handleError = (e: Event) => {
+      console.error("[v0] Audio error:", e)
+    }
+
     audio.addEventListener("timeupdate", handleTimeUpdate)
     audio.addEventListener("loadedmetadata", handleLoadedMetadata)
+    audio.addEventListener("canplay", handleCanPlay)
     audio.addEventListener("play", handlePlay)
     audio.addEventListener("pause", handlePause)
     audio.addEventListener("ended", handleEnded)
+    audio.addEventListener("error", handleError)
 
     return () => {
       audio.removeEventListener("timeupdate", handleTimeUpdate)
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata)
+      audio.removeEventListener("canplay", handleCanPlay)
       audio.removeEventListener("play", handlePlay)
       audio.removeEventListener("pause", handlePause)
       audio.removeEventListener("ended", handleEnded)
+      audio.removeEventListener("error", handleError)
     }
   }, [])
 
@@ -218,7 +234,8 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
       <audio
         ref={audioRef}
         src={DEMO_AUDIO_URL}
-        preload="metadata"
+        preload="auto"
+        crossOrigin="anonymous"
         className="hidden"
       />
 
