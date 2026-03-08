@@ -5,10 +5,13 @@
  * Update: Uses local Vercel Proxy (/api/groq-proxy) to avoid CORS issues in production.
  */
 
-import { TranscriptionResult } from '@/types';
-
 // const GROQ_API_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
 const GROQ_API_URL = '/api/groq-proxy';
+
+export interface TranscriptionResult {
+    text: string;
+    words: Array<{ word: string; start: number; end: number }>;
+}
 
 export const transcribeAudio = async (audioBlob: Blob): Promise<TranscriptionResult> => {
   // Note: API Key is now handled server-side in the proxy for better security.

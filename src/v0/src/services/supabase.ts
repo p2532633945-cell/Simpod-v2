@@ -4,8 +4,7 @@
  * 从 legacy 项目迁移的核心数据库操作函数
  */
 
-import { createClient } from '@/lib/supabase/client';
-import { Hotzone, Anchor, TranscriptSegment } from '@/types';
+import { supabase, Hotzone, Anchor, TranscriptSegment } from '../lib/supabase';
 
 /**
  * 保存或更新热区
@@ -14,9 +13,12 @@ import { Hotzone, Anchor, TranscriptSegment } from '@/types';
  * 以兼容数据库schema
  */
 export const saveHotzone = async (hotzone: Hotzone) => {
-  const supabase = createClient();
+  // Database Schema Compatibility Fix:
+  // The 'hotzones' table in Supabase likely does not have a 'transcript_words' column.
+  // We must move 'transcript_words' from the top-level object into the 'metadata' JSONB column
+  // before sending it to the database.
 
-  // Create a copy to avoid mutating original object used in UI
+  // Create a copy to avoid mutating the original object used in the UI
   const payload = { ...hotzone };
 
   // If transcript_words exists at top level, move it to metadata
@@ -25,7 +27,7 @@ export const saveHotzone = async (hotzone: Hotzone) => {
           ...payload.metadata,
           transcript_words: payload.transcript_words
       };
-      // Remove top-level property so Supabase doesn't complain about missing column
+      // Remove the top-level property so Supabase doesn't complain about missing column
       delete (payload as any).transcript_words;
   }
 
@@ -46,8 +48,6 @@ export const saveHotzone = async (hotzone: Hotzone) => {
  * 保存锚点
  */
 export const saveAnchor = async (anchor: Anchor) => {
-  const supabase = createClient();
-
   const { data, error } = await supabase
     .from('anchors')
     .insert(anchor)
@@ -67,8 +67,6 @@ export const saveAnchor = async (anchor: Anchor) => {
  * 将 metadata.transcript_words 拉到顶层供UI使用
  */
 export const fetchHotzones = async (audioId: string): Promise<Hotzone[]> => {
-  const supabase = createClient();
-
   const { data, error } = await supabase
     .from('hotzones')
     .select('*')
@@ -99,9 +97,7 @@ export const fetchHotzones = async (audioId: string): Promise<Hotzone[]> => {
  * 容差：±1秒
  */
 export const findExistingTranscript = async (audioId: string, startTime: number, endTime: number): Promise<TranscriptSegment | null> => {
-    const supabase = createClient();
-
-    // Look for any transcript that overlaps with requested range
+    // Look for any transcript that overlaps with the requested range
     // We will do a smarter client-side check after fetching candidates.
     // Fetch any transcript where (start <= requested_end) AND (end >= requested_start)
     const { data, error } = await supabase
@@ -119,7 +115,7 @@ export const findExistingTranscript = async (audioId: string, startTime: number,
     // Find the best match: one that fully covers the requested range
     if (data && data.length > 0) {
         // Tolerance: 1 second
-        const perfectMatch = data.find((t: TranscriptSegment) =>
+        const perfectMatch = data.find(t =>
             t.start_time <= startTime + 1 &&
             t.end_time >= endTime - 1
         );
@@ -143,8 +139,6 @@ export const saveTranscript = async (
     text: string,
     words: any
 ): Promise<void> => {
-    const supabase = createClient();
-
     const { error } = await supabase
       .from('transcripts')
       .upsert({
@@ -153,7 +147,7 @@ export const saveTranscript = async (
           end_time: endTime,
           text,
           words
-      }, { onConflict: 'audio_id,start_time,end_time' })
+      }, { onConflict: 'audio_id,start_time,end_time' }) // Assuming a composite unique key exists
       .select()
       .single();
 

@@ -4,13 +4,13 @@
  * 从 legacy 项目迁移的核心业务逻辑
  */
 
-import { Anchor, Hotzone, TranscriptSegment } from '@/types';
-import { sliceAudio, sliceRemoteAudio } from '@/utils/audio';
+import { Anchor, Hotzone, TranscriptSegment } from '../lib/supabase';
+import { sliceAudio, sliceRemoteAudio } from '../utils/audio';
 import { transcribeAudio } from './groq';
 import { findExistingTranscript, saveTranscript } from './supabase';
 
 // Simple UUID generator
-const generateId = () => Math.random().toString(36).substring(2, 11);
+const generateId = () => Math.random().toString(36).substr(2, 9);
 
 /**
  * 从锚点生成热区
@@ -44,9 +44,9 @@ export const generateHotzoneFromAnchor = (
 
   // Extract text snippet from mock transcript if available
   const snippet = transcript
-    ?.filter((seg) => seg.end_time > startTime && seg.start_time < endTime)
+    .filter((seg) => seg.end_time > startTime && seg.start_time < endTime)
     .map((seg) => seg.text)
-    .join(' ') || "";
+    .join(' ');
 
   return {
     id: generateId(),
@@ -79,7 +79,7 @@ export const processAnchorsToHotzones = async (
   transcript?: TranscriptSegment[],
   audioFile?: File, // Optional: Real audio file for processing
   audioUrl?: string, // Optional: Remote URL
-  _transcriptInfo?: { url: string; type: string }, // Optional: Official transcript (unused in MVP)
+  transcriptInfo?: { url: string; type: string }, // Optional: Official transcript
   existingHotzones: Hotzone[] = [] // Optional: Existing hotzones to avoid reprocessing
 ): Promise<Hotzone[]> => {
 
@@ -135,7 +135,7 @@ export const processAnchorsToHotzones = async (
           if (extendLeft > 0 || extendRight > 0) {
               console.log(`[Extending] Zone ${nearbyZone.id} by Left:${extendLeft.toFixed(2)}s, Right:${extendRight.toFixed(2)}s`);
 
-              // Update: working copy immediately so subsequent anchors in this batch see the extended zone
+              // Update the working copy immediately so subsequent anchors in this batch see the extended zone
               nearbyZone.start_time = Math.min(nearbyZone.start_time, targetStart);
               nearbyZone.end_time = Math.max(nearbyZone.end_time, targetEnd);
 
@@ -163,7 +163,7 @@ export const processAnchorsToHotzones = async (
   }
 
   // Helper to slice and transcribe a specific range
-  const processRange = async (start: number, end: number, _audioId: string): Promise<{ text: string, words: any[] }> => {
+  const processRange = async (start: number, end: number, audioId: string): Promise<{ text: string, words: any[] }> => {
       if (end <= start) return { text: "", words: [] };
 
       console.log(`[ASR] Processing diff range: ${start.toFixed(2)} - ${end.toFixed(2)}`);
@@ -181,7 +181,7 @@ export const processAnchorsToHotzones = async (
       // Check cache first? (Maybe later)
       const result = await transcribeAudio(audioSlice);
 
-      // Adjust timestamps relative to global start
+      // Adjust timestamps relative to the global start
       const adjustedWords = result.words?.map(w => ({
           ...w,
           start: start + w.start,
@@ -193,7 +193,7 @@ export const processAnchorsToHotzones = async (
 
   // 1. Process Updates (Extensions)
   const updatedResults = await Promise.all(Array.from(hotzonesToUpdate.values()).map(async ({ hz }) => {
-      // Re-calculate diffs based on FINAL state of 'hz' (working copy) vs 'original'
+      // Re-calculate diffs based on the FINAL state of 'hz' (working copy) vs 'original'
       const original = existingHotzones.find(h => h.id === hz.id);
       if (!original) return hz; // Should not happen
 
@@ -245,7 +245,7 @@ export const processAnchorsToHotzones = async (
   const mergedNewHotzones: Hotzone[] = [];
   if (hotzones.length > 0) {
       let current = hotzones[0];
-      for (let i=1; i < hotzones.length; i++) {
+      for (let i = 1; i < hotzones.length; i++) {
         const next = hotzones[i];
         if (next.start_time <= current.end_time + 2) {
           current.end_time = Math.max(current.end_time, next.end_time);
@@ -262,7 +262,7 @@ export const processAnchorsToHotzones = async (
 
   const processedNewHotzones = await Promise.all(mergedNewHotzones.map(async (hz) => {
     // ... (Keep existing transcription logic for new zones)
-    // Reuse: exact same logic block as before
+    // Reuse the exact same logic block as before
     try {
       let audioSlice: Blob;
 

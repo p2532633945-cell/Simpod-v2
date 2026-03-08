@@ -7,13 +7,13 @@
 ## 当前状态
 
 ### 最后更新
-- **更新时间**: 2026-03-08
+- **更新时间**: 2026-03-07
 - **更新者**: Claude Code
-- **当前分支**: master
+- **当前分支**: (待创建项目后设置)
 
 ### 项目阶段
-- **当前阶段**: 🚀 MVP 开发 - Next.js 项目初始化完成
-- **下一步**: 实现播客搜索功能
+- **当前阶段**: 🚀 准备阶段 - 工作流系统已搭建完成
+- **下一步**: 初始化 Next.js 项目结构
 
 ---
 
@@ -32,33 +32,6 @@
 - [x] 定义产品愿景和核心价值
 - [x] 确定技术栈（Next.js + Supabase）
 - [x] 设计数据模型（anchors、hotzones、transcripts）
-- [x] 创建产品需求文档（PRD.md）
-
-### 3. 初始化 Next.js 项目 ✅
-- [x] 创建 package.json 配置
-- [x] 配置 TypeScript（tsconfig.json）
-- [x] 配置 Tailwind CSS（tailwind.config.ts、postcss.config.mjs）
-- [x] 配置 ESLint（.eslintrc.json）
-- [x] 配置 Prettier（.prettierrc）
-- [x] 创建环境变量模板（.env.example）
-- [x] 创建 App Router 结构（src/app/）
-- [x] 创建根布局（layout.tsx、globals.css）
-- [x] 创建首页（page.tsx）
-- [x] 安装 Supabase 依赖（@supabase/supabase-js、@supabase/ssr）
-- [x] 创建 Supabase 客户端（client.ts、server.ts）
-- [x] 创建 Supabase 中间件（middleware.ts）
-- [x] 创建 Zustand store（playerStore.ts）
-- [x] 创建组件目录结构（components/ui/、player/、hotzone/、shared/）
-- [x] 创建 API 路由（api/groq-proxy、api/hotzones）
-- [x] 迁移服务层代码（services/supabase.ts、services/groq.ts、services/hotzone.ts）
-- [x] 创建统一类型文件（types/index.ts）
-- [x] 配置路径别名（@/*）
-- [x] 成功构建并运行开发服务器
-
-### 2026-03-08: 初始化 Next.js 项目
-**状态**: ✅ 已完成
-**更新者**: Claude Code
-**描述**: 手动创建 Next.js 15 项目结构，配置 TypeScript、Tailwind CSS、ESLint、Prettier。设置 Supabase 客户端（client.ts、server.ts）和中间件。创建 Zustand playerStore。创建 API 路由（groq-proxy、hotzones）。迁移现有服务层代码并更新导入路径。成功构建并验证开发服务器运行正常。
 
 ---
 
@@ -75,38 +48,38 @@
 ## 待办事项
 
 ### 高优先级 🔥
-- [ ] 实现播客搜索功能
-  - [ ] 创建 podcast-search API 代理
-  - [ ] 创建搜索页面 UI
-  - [ ] 集成 Podcast Index API
-  - [ ] 集成 iTunes Search API
-  - [ ] 结果去重和合并
-- [ ] 实现音频播放器
-  - [ ] 创建播放器 UI 组件
-  - [ ] 集成 Web Audio API
-  - [ ] 实现播放控制（播放/暂停/跳转）
-  - [ ] 实现进度显示
-  - [ ] 实现速度调整
-- [ ] 实现热区标记功能
-  - [ ] 创建 MARK 按钮组件
-  - [ ] 实现锚点创建
-  - [ ] 实现热区生成
-  - [ ] 集成 Zustand store
+- [ ] 初始化 Next.js 项目
+  - [ ] 使用 `npx create-next-app@latest` 创建项目
+  - [ ] 配置 TypeScript
+  - [ ] 配置 Tailwind CSS
+  - [ ] 配置 ESLint 和 Prettier
+- [ ] 设置 Supabase 客户端
+  - [ ] 安装 `@supabase/supabase-js`
+  - [ ] 创建环境变量模板
+  - [ ] 配置客户端和服务端客户端
+- [ ] 设置 Zustand 状态管理
+  - [ ] 安装 `zustand`
+  - [ ] 创建基础 store 结构
 
 ### 中优先级 ⚡
-- [ ] 实现热区显示
-  - [ ] 创建热区列表组件
-  - [ ] 显示转录文本
-  - [ ] 点击跳转播放
-- [ ] 实现批量复习功能
-  - [ ] 创建复习页面
-  - [ ] 显示所有热区
-  - [ ] 逐个播放热区
+- [ ] 设计并实施数据库 schema
+  - [ ] 创建 `anchors` 表
+  - [ ] 创建 `hotzones` 表
+  - [ ] 创建 `transcripts` 表
+  - [ ] 设置 RLS 策略
+- [ ] 实现核心服务层
+  - [ ] `groq.ts` - Groq API 集成
+  - [ ] `supabase.ts` - Supabase 操作
+  - [ ] `hotzone.ts` - 热区处理
+- [ ] 实现音频工具
+  - [ ] `audio.ts` - Web Audio API 封装
+  - [ ] 音频切片功能
 
 ### 低优先级 📋
-- [ ] 实现波形可视化
-- [ ] 实现播客剧集列表
-- [ ] 实现数据持久化（localStorage/IndexedDB）
+- [ ] 设计 UI 组件库
+- [ ] 实现播客搜索功能
+- [ ] 实现音频播放器
+- [ ] 实现热区可视化
 
 ---
 
@@ -130,9 +103,9 @@
 - **搜索**: Podcast Index API + iTunes API
 
 ### 开发工具
-- **包管理**: npm
+- **包管理**: npm/pnpm
 - **代码规范**: ESLint + Prettier
-- **测试**: (待添加 - Vitest + Playwright)
+- **测试**: Vitest + Playwright
 
 ---
 
@@ -164,20 +137,6 @@
 - Next.js: 全栈框架，支持服务端渲染和 API Routes
 - Supabase: BaaS，提供数据库、认证、实时功能
 - Zustand: 轻量级状态管理，适合客户端状态
-
-### 2026-03-08: Next.js 项目初始化
-**决策**: 手动创建项目结构而非使用 create-next-app
-
-**理由**:
-- 避免目录名称冲突（Simpod-v2 包含大写字母）
-- 更精细控制项目结构和配置
-- 避免覆盖现有代码
-
-**实施**:
-- 手动创建 package.json、tsconfig.json、next.config.mjs 等配置文件
-- 创建 src/app/ 目录结构
-- 配置 Supabase 客户端和服务端
-- 配置 Tailwind CSS 和 ESLint
 
 ---
 
@@ -219,6 +178,7 @@ PODCAST_INDEX_SECRET=
 
 <body>
 ```
+
 类型：`feat`、`fix`、`refactor`、`docs`、`style`、`test`、`chore`
 
 ---
@@ -271,7 +231,6 @@ PODCAST_INDEX_SECRET=
 - [CLAUDE.md](./CLAUDE.md) - 项目宪法
 - [WORKFLOW_GUIDE.md](./WORKFLOW_GUIDE.md) - 工作流指南
 - [ACTION_GUIDE.md](./ACTION_GUIDE.md) - 开发行动指南
-- [PRD.md](./PRD.md) - 产品需求文档
 
 ### 外部资源
 - [Next.js 文档](https://nextjs.org/docs)
@@ -287,6 +246,5 @@ PODCAST_INDEX_SECRET=
 
 ---
 
-**文档版本**: 1.1
+**文档版本**: 1.0
 **创建日期**: 2026-03-07
-**最后更新**: 2026-03-08
