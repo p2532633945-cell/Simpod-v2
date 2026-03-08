@@ -4,7 +4,6 @@
     "next/typescript"
   ],
   "ignorePatterns": [
-    "src/v0/**",
     "src/pages-legacy/**"
   ],
   "rules": {

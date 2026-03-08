@@ -51,6 +51,7 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
     duration: 180, // 默认 3 分钟作为 fallback
     isPlaying: false,
     playbackRate: 1,
+    volume: 1,
   })
 
   // 音频事件处理
@@ -154,7 +155,7 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
   const handlePlayPause = useCallback(() => {
     const audio = audioRef.current
     if (!audio) return
-    
+
     if (audio.paused) {
       audio.play().catch(console.error)
     } else {

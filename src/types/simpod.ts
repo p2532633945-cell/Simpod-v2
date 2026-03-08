@@ -1,6 +1,6 @@
 /**
  * Simpod v2 - Core Type Definitions
- * 
+ *
  * 严格遵守技术契约定义的类型，禁止使用 any
  */
 
@@ -21,6 +21,7 @@ export type PlayerState = {
   duration: number
   isPlaying: boolean
   playbackRate: number
+  volume: number
 }
 
 // ============================================

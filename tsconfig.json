@@ -36,7 +36,6 @@
   ],
   "exclude": [
     "node_modules",
-    "src/v0",
     "src/pages-legacy"
   ]
 }

@@ -8,11 +8,11 @@
 
 ### 最后更新
 - **更新时间**: 2026-03-08
-- **更新者**: Claude Code
+- **更新者**: Antigravity
 - **当前分支**: master
 
 ### 项目阶段
-- **当前阶段**: 🚀 MVP 开发 - Next.js 项目初始化完成
+- **当前阶段**: 🚀 MVP 开发 - 前端组件库集成完成
 - **下一步**: 实现播客搜索功能
 
 ---
@@ -59,6 +59,11 @@
 **状态**: ✅ 已完成
 **更新者**: Claude Code
 **描述**: 手动创建 Next.js 15 项目结构，配置 TypeScript、Tailwind CSS、ESLint、Prettier。设置 Supabase 客户端（client.ts、server.ts）和中间件。创建 Zustand playerStore。创建 API 路由（groq-proxy、hotzones）。迁移现有服务层代码并更新导入路径。成功构建并验证开发服务器运行正常。
+
+### 2026-03-08: 集成 v0 前端组件
+**状态**: ✅ 已完成
+**更新者**: Antigravity
+**描述**: 将 v0 文件夹中的完整前端库集成到 Next.js App Router 项目中，包括播放器、热区、转录等所有组件，添加必要依赖（clsx、tailwind-merge、lucide-react、framer-motion），迁移页面和 stores，清理 v0 目录。
 
 ---
 
