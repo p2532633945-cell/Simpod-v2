@@ -291,14 +291,11 @@ export function formatTime(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`
 }
 
-/** 格式化日期显示 */
+/** 格式化日期显示 - 使用 UTC 时间避免 hydration 不匹配 */
 export function formatDate(dateString: string): string {
   const date = new Date(dateString)
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date)
+  const year = date.getUTCFullYear()
+  const month = date.getUTCMonth() + 1
+  const day = date.getUTCDate()
+  return `${year}年${month}月${day}日`
 }
