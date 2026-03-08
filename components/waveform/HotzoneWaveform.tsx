@@ -12,16 +12,23 @@ import { cn } from "@/lib/utils"
 import type { HotzoneWaveformProps, Hotzone } from "@/types/simpod"
 import { formatTime } from "@/lib/mock-data"
 
-// 生成模拟波形数据
-function generateWaveformData(count: number): number[] {
-  return Array.from({ length: count }, (_, i) => {
-    const noise1 = Math.sin(i * 0.4) * Math.cos(i * 0.15)
-    const noise2 = Math.sin(i * 0.2 + 1.5) * 0.5
-    return 0.2 + Math.abs(noise1 + noise2) * 0.6
-  })
-}
-
 const BAR_COUNT = 120
+
+// 预生成的波形数据 - 避免 hydration 不匹配
+const WAVEFORM_DATA: number[] = [
+  0.65, 0.72, 0.58, 0.81, 0.45, 0.69, 0.77, 0.52, 0.88, 0.41,
+  0.73, 0.66, 0.84, 0.49, 0.71, 0.59, 0.82, 0.47, 0.75, 0.63,
+  0.79, 0.54, 0.86, 0.43, 0.68, 0.76, 0.51, 0.83, 0.46, 0.74,
+  0.61, 0.87, 0.48, 0.72, 0.57, 0.80, 0.44, 0.70, 0.78, 0.53,
+  0.85, 0.42, 0.67, 0.75, 0.50, 0.81, 0.45, 0.73, 0.62, 0.88,
+  0.47, 0.71, 0.56, 0.79, 0.43, 0.69, 0.77, 0.52, 0.84, 0.41,
+  0.66, 0.74, 0.49, 0.80, 0.44, 0.72, 0.61, 0.87, 0.46, 0.70,
+  0.55, 0.78, 0.42, 0.68, 0.76, 0.51, 0.83, 0.40, 0.65, 0.73,
+  0.48, 0.79, 0.43, 0.71, 0.60, 0.86, 0.45, 0.69, 0.54, 0.77,
+  0.41, 0.67, 0.75, 0.50, 0.82, 0.39, 0.64, 0.72, 0.47, 0.78,
+  0.42, 0.70, 0.59, 0.85, 0.44, 0.68, 0.53, 0.76, 0.40, 0.66,
+  0.74, 0.49, 0.81, 0.38, 0.63, 0.71, 0.46, 0.77, 0.41, 0.69,
+]
 
 export function HotzoneWaveform({
   hotzones,
@@ -34,7 +41,6 @@ export function HotzoneWaveform({
   // TODO: 此处应调用 useHotzoneStore 获取当前 audio_id 的 hotzones
 
   const containerRef = useRef<HTMLDivElement>(null)
-  const [waveformData] = useState(() => generateWaveformData(BAR_COUNT))
   const [hoveredHotzone, setHoveredHotzone] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
 
@@ -120,7 +126,7 @@ export function HotzoneWaveform({
       >
         {/* Waveform Bars */}
         <div className="absolute inset-0 flex items-center gap-[1px] px-2">
-          {waveformData.map((height, i) => {
+          {WAVEFORM_DATA.map((height, i) => {
             const barPosition = (i / BAR_COUNT) * 100
             const isBeforePlayhead = barPosition <= progress
 
@@ -143,12 +149,7 @@ export function HotzoneWaveform({
                       : "bg-muted-foreground/10"
                 )}
                 style={{
-                  height: `${height * 100}%`,
-                  boxShadow:
-                    isBeforePlayhead && inHotzone
-                      ? "0 0 6px hsl(var(--simpod-mark) / 0.5)"
-                      : "none",
-                  opacity: isHovered ? 1 : undefined,
+                  height: `${Math.round(height * 100)}%`,
                 }}
               />
             )
