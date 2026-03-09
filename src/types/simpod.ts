@@ -83,7 +83,7 @@ export interface Podcast {
   feedUrl: string
   artwork: string
   description?: string
-  source?: 'podcastindex' | 'itunes'
+  source?: 'podcastindex' | 'itunes' | 'rss'
 }
 
 /** Podcast 单集 */
