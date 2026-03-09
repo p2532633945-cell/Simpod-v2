@@ -11,7 +11,7 @@ import { useCallback, useRef, useState } from "react"
 import { Play, Pause, SkipBack, SkipForward } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { PlaybackControlsProps } from "@/types/simpod"
-import { formatTime } from "@/lib/mock-data"
+import { formatTime } from "@/lib/time"
 
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2]
 

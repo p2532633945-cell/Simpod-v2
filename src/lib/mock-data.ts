@@ -58,7 +58,7 @@ export const mockEpisodes: Episode[] = [
     title: "The fiscal implications of quantitative easing",
     description: "An in-depth analysis of central bank policies and their long-term economic effects",
     pubDate: "2026-03-01T10:00:00Z",
-    audioUrl: "https://example.com/audio/economist-ep1.mp3",
+    audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
     duration: 2400, // 40 minutes
     artwork: "/placeholder.svg",
   },
@@ -67,7 +67,7 @@ export const mockEpisodes: Episode[] = [
     title: "AI disruption in traditional industries",
     description: "How artificial intelligence is reshaping manufacturing, healthcare, and finance",
     pubDate: "2026-02-28T10:00:00Z",
-    audioUrl: "https://example.com/audio/economist-ep2.mp3",
+    audioUrl: "https://www.learningcontainer.com/wp-content/uploads/2020/02/Kalimba.mp3",
     duration: 1800, // 30 minutes
     artwork: "/placeholder.svg",
   },
@@ -76,7 +76,7 @@ export const mockEpisodes: Episode[] = [
     title: "The future of work and remote collaboration",
     description: "Exploring how technology is changing workplace dynamics",
     pubDate: "2026-02-25T10:00:00Z",
-    audioUrl: "https://example.com/audio/economist-ep3.mp3",
+    audioUrl: "https://archive.org/download/testmp3/testfile.mp3",
     duration: 2100, // 35 minutes
     artwork: "/placeholder.svg",
   },
@@ -281,15 +281,11 @@ export function getHotzonesByStatus(
 
 /** 生成唯一 ID */
 export function generateId(prefix: string): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
 }
 
-/** 格式化时间显示 */
-export function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60)
-  const secs = Math.floor(seconds % 60)
-  return `${mins}:${secs.toString().padStart(2, "0")}`
-}
+// formatTime moved to @/lib/time.ts - re-export for backward compatibility
+export { formatTime } from "@/lib/time"
 
 /** 格式化日期显示 - 使用 UTC 时间避免 hydration 不匹配 */
 export function formatDate(dateString: string): string {

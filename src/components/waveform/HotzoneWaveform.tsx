@@ -15,7 +15,8 @@
 import { useCallback, useRef, useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import type { HotzoneWaveformProps, Hotzone, Anchor } from "@/types/simpod"
-import { formatTime, mockAnchors } from "@/lib/mock-data"
+import { formatTime } from "@/lib/time"
+import { mockAnchors } from "@/lib/mock-data"
 import { Flag } from "lucide-react"
 
 const BAR_COUNT = 120 // 更多条形使波形更细腻

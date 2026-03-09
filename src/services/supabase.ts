@@ -29,17 +29,38 @@ export const saveHotzone = async (hotzone: Hotzone) => {
       delete (payload as any).transcript_words;
   }
 
-  const { data, error } = await supabase
-    .from('hotzones')
-    .upsert(payload, { onConflict: 'id' })
-    .select()
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from('hotzones')
+      .upsert(payload, { onConflict: 'id' })
+      .select()
+      .single();
 
-  if (error) {
-    console.error('Error saving hotzone:', error);
-    throw error;
+    if (error) {
+      // Extract error info early to avoid serialization issues
+      const errorInfo = {
+        message: String(error.message || 'Unknown error'),
+        code: String(error.code || 'UNKNOWN'),
+        details: String(error.details || 'No details'),
+        hint: String(error.hint || 'No hint'),
+        hotzoneId: hotzone.id
+      };
+      console.error('[Supabase] Error saving hotzone:', errorInfo);
+      throw new Error(errorInfo.message);
+    }
+
+    return data;
+  } catch (err) {
+    // Catch all errors including network errors
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    const name = err instanceof Error ? err.name : 'Unknown';
+    console.error('[Supabase] saveHotzone exception:', {
+      message,
+      name,
+      hotzoneId: hotzone.id
+    });
+    throw err; // Re-throw for upper layer handling
   }
-  return data;
 };
 
 /**
@@ -69,27 +90,47 @@ export const saveAnchor = async (anchor: Anchor) => {
 export const fetchHotzones = async (audioId: string): Promise<Hotzone[]> => {
   const supabase = createClient();
 
-  const { data, error } = await supabase
-    .from('hotzones')
-    .select('*')
-    .eq('audio_id', audioId)
-    .order('start_time', { ascending: true });
+  try {
+    const { data, error } = await supabase
+      .from('hotzones')
+      .select('*')
+      .eq('audio_id', audioId)
+      .order('start_time', { ascending: true });
 
-  if (error) {
-    console.error('Error fetching hotzones:', error);
-    throw error;
+    if (error) {
+      // Extract error info early to avoid serialization issues
+      const errorInfo = {
+        message: String(error.message || 'Unknown error'),
+        code: String(error.code || 'UNKNOWN'),
+        details: String(error.details || 'No details'),
+        hint: String(error.hint || 'No hint'),
+        audioId
+      };
+      console.error('[Supabase] Error fetching hotzones:', errorInfo);
+      throw new Error(errorInfo.message);
+    }
+
+    // Transform back for UI: pull transcript_words from metadata to top-level
+    return (data as any[]).map(hz => {
+        if (hz.metadata && hz.metadata.transcript_words) {
+            return {
+                ...hz,
+                transcript_words: hz.metadata.transcript_words
+            };
+        }
+        return hz;
+    }) as Hotzone[];
+  } catch (err) {
+    // Catch all errors, including network errors
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    const name = err instanceof Error ? err.name : 'Unknown';
+    console.error('[Supabase] fetchHotzones exception:', {
+      message,
+      name,
+      audioId
+    });
+    throw err; // Re-throw for upper layer handling
   }
-
-  // Transform back for UI: pull transcript_words from metadata to top-level
-  return (data as any[]).map(hz => {
-      if (hz.metadata && hz.metadata.transcript_words) {
-          return {
-              ...hz,
-              transcript_words: hz.metadata.transcript_words
-          };
-      }
-      return hz;
-  }) as Hotzone[];
 };
 
 /**

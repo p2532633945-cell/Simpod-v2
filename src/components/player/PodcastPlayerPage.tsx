@@ -2,15 +2,14 @@
 
 /**
  * PodcastPlayerPage - 播放器页面容器
- * 
+ *
  * 组合所有播放器相关组件的页面级容器
  * 技术契约要求：必须拆分子组件，这里只做组合和状态传递
  */
 
 import { useState, useCallback, useMemo, useRef, useEffect } from "react"
-import { ArrowLeft, Settings, Share2 } from "lucide-react"
+import { ArrowLeft, Settings, Share2, Loader2, AlertCircle, Music } from "lucide-react"
 import Link from "next/link"
-import { cn } from "@/lib/utils"
 
 // 子组件
 import { PlaybackControls } from "@/components/player/PlaybackControls"
@@ -19,82 +18,134 @@ import { HotzoneWaveform } from "@/components/waveform/HotzoneWaveform"
 import { TranscriptStream } from "@/components/transcript/TranscriptStream"
 import { HotzoneSidebar } from "@/components/hotzones/HotzoneSidebar"
 
+// Zustand store
+import { usePlayerStore } from "@/stores/playerStore"
+
 // 类型
-import type { PlayerState, Hotzone, Word, Episode, Podcast } from "@/types/simpod"
+import type { Word, Anchor } from "@/types/simpod"
+
+// 服务
+import { processAnchorsToHotzones } from "@/services/hotzone"
+import { saveHotzone, fetchHotzones } from "@/services/supabase"
 
 // Mock 数据
-import {
-  mockHotzones,
-  mockWords,
-  mockEpisodes,
-  mockPodcasts,
-  generateId,
-} from "@/lib/mock-data"
+import { mockWords, generateId } from "@/lib/mock-data"
 
 interface PodcastPlayerPageProps {
   audioId: string
+  audioUrl?: string
 }
 
-// 示例音频 URL - 使用可靠的公开音频
-const DEMO_AUDIO_URL = "https://www.learningcontainer.com/wp-content/uploads/2020/02/Kalimba.mp3"
-
-export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
+export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps) {
   // ============================================
-  // 状态管理 - 后续接入 Zustand
+  // 客户端渲染保护 - 防止 hydration 不匹配
+  // ============================================
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
+  // ============================================
+  // 加载状态
+  // ============================================
+  const [isMarking, setIsMarking] = useState(false)
+  const [audioLoading, setAudioLoading] = useState(true)
+  const [audioError, setAudioError] = useState<string | null>(null)
+  // Use passed audioUrl - this is the actual podcast episode URL
+  const [currentAudioUrl, setCurrentAudioUrl] = useState<string | undefined>(audioUrl)
+
+  // Log initial audio URL for debugging
+  console.log('[PodcastPlayerPage] Initializing with audioUrl:', audioUrl)
+
+  // ============================================
+  // Zustand Store 状态管理
   // ============================================
 
   const audioRef = useRef<HTMLAudioElement>(null)
 
-  // TODO: 此处应调用 usePlayerStore 获取播放状态与当前音频
-  const [playerState, setPlayerState] = useState<PlayerState>({
-    currentTime: 0,
-    duration: 180, // 默认 3 分钟作为 fallback
-    isPlaying: false,
-    playbackRate: 1,
-    volume: 1,
-  })
+  // 从 store 获取状态和 actions
+  const {
+    currentTime,
+    duration,
+    isPlaying,
+    playbackRate,
+    volume,
+    hotzones,
+    setCurrentTime,
+    setDuration,
+    setIsPlaying,
+    setAudioRef,
+    addHotzone,
+  } = usePlayerStore()
 
-  // 音频事件处理
+  // 本地状态：选中热区（UI 状态不需要放入 store）
+  const [selectedHotzoneId, setSelectedHotzoneId] = useState<string | undefined>()
+
+  // 设置 audioRef 到 store
+  useEffect(() => {
+    if (audioRef.current) {
+      setAudioRef(audioRef.current)
+    }
+  }, [setAudioRef])
+
+  // 音频事件处理 - 更新 Zustand store
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
 
     const handleTimeUpdate = () => {
-      setPlayerState((prev) => ({
-        ...prev,
-        currentTime: audio.currentTime,
-      }))
+      setCurrentTime(audio.currentTime)
     }
 
     const handleLoadedMetadata = () => {
-      setPlayerState((prev) => ({
-        ...prev,
-        duration: audio.duration,
-      }))
+      console.log("[Player] Audio loaded, duration:", audio.duration)
+      setDuration(audio.duration)
+      setAudioLoading(false)
+      setAudioError(null)
     }
 
     const handlePlay = () => {
-      setPlayerState((prev) => ({ ...prev, isPlaying: true }))
+      setIsPlaying(true)
     }
 
     const handlePause = () => {
-      setPlayerState((prev) => ({ ...prev, isPlaying: false }))
+      setIsPlaying(false)
     }
 
     const handleEnded = () => {
-      setPlayerState((prev) => ({ ...prev, isPlaying: false, currentTime: 0 }))
+      setIsPlaying(false)
+      setCurrentTime(0)
     }
 
     const handleCanPlay = () => {
-      console.log("[v0] Audio can play, duration:", audio.duration)
-      setPlayerState((prev) => ({
-        ...prev,
-        duration: audio.duration,
-      }))
+      console.log("[Player] Audio can play")
+      setAudioLoading(false)
+      setAudioError(null)
+    }
+
+    const getAudioErrorMessage = (code?: number): string => {
+      const errorMessages: Record<number, string> = {
+        1: "User aborted the audio loading.",
+        2: "A network error occurred while loading the audio.",
+        3: "The audio decoding failed.",
+        4: "The audio format is not supported."
+      }
+      return errorMessages[code || 0] || "Failed to load audio. Please try again."
     }
 
     const handleError = (e: Event) => {
-      console.error("[v0] Audio error:", e)
+      const audio = e.target as HTMLAudioElement
+      console.error("[Player] Audio error:", {
+        error: audio.error,
+        code: audio.error?.code,
+        message: audio.error?.message,
+        src: audio.src,
+        networkState: audio.networkState,
+        readyState: audio.readyState
+      })
+      setAudioLoading(false)
+      setAudioError(getAudioErrorMessage(audio.error?.code))
     }
 
     audio.addEventListener("timeupdate", handleTimeUpdate)
@@ -114,15 +165,37 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
       audio.removeEventListener("ended", handleEnded)
       audio.removeEventListener("error", handleError)
     }
-  }, [])
+  }, [setCurrentTime, setDuration, setIsPlaying, currentAudioUrl])
 
-  // TODO: 此处应调用 useHotzoneStore 获取当前 audio_id 的 hotzones
-  const [hotzones, setHotzones] = useState<Hotzone[]>(
-    mockHotzones.filter((hz) => hz.audio_id === audioId)
-  )
+  // 加载当前 audio_id 的热区 - 从数据库
+  useEffect(() => {
+    const loadHotzones = async () => {
+      try {
+        console.log("[Player] Loading hotzones for audioId:", audioId)
+        const fetchedHotzones = await fetchHotzones(audioId)
+        console.log("[Player] Loaded hotzones:", fetchedHotzones.length)
+        fetchedHotzones.forEach(hz => addHotzone(hz))
+      } catch (err) {
+        const error = err as Error
+        const errorInfo = {
+          message: error.message || 'Unknown error',
+          name: error.name || 'Unknown',
+          stack: error.stack,
+          audioId
+        }
+        console.error("[Player] Failed to load hotzones:", errorInfo)
 
-  // 当前选中的热区
-  const [selectedHotzoneId, setSelectedHotzoneId] = useState<string | undefined>()
+        // Fallback to mock data if database fetch fails
+        const { mockHotzones } = await import("@/lib/mock-data")
+        const filteredHotzones = mockHotzones.filter((hz) => hz.audio_id === audioId)
+        filteredHotzones.forEach(hz => addHotzone(hz))
+      }
+    }
+
+    if (isMounted) {
+      loadHotzones()
+    }
+  }, [audioId, addHotzone, isMounted])
 
   // 获取当前热区的转录词
   const currentTranscriptWords: Word[] = useMemo(() => {
@@ -133,10 +206,6 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
     // 默认返回 mock words
     return mockWords
   }, [hotzones, selectedHotzoneId])
-
-  // Mock episode 和 podcast 数据
-  const episode: Episode = mockEpisodes[0]
-  const podcast: Podcast = mockPodcasts[0]
 
   // ============================================
   // 事件处理 - 遵循技术契约接口
@@ -151,17 +220,17 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
     }
   }, [])
 
-  // onPlayPause(): void
+  // onPlayPause(): void - 使用 store 的 setIsPlaying 而非直接操作 audio
   const handlePlayPause = useCallback(() => {
     const audio = audioRef.current
     if (!audio) return
 
     if (audio.paused) {
-      audio.play().catch(console.error)
+      setIsPlaying(true)
     } else {
-      audio.pause()
+      setIsPlaying(false)
     }
-  }, [])
+  }, [setIsPlaying])
 
   // onRateChange(rate: number): void
   const handleRateChange = useCallback((rate: number) => {
@@ -169,30 +238,53 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
     if (audio) {
       audio.playbackRate = rate
     }
-    setPlayerState((prev) => ({
-      ...prev,
-      playbackRate: rate,
-    }))
   }, [])
 
-  // onMark(timestamp: number): void - 不暂停播放
-  const handleMark = useCallback((timestamp: number) => {
-    // 创建新的 pending hotzone
-    const newHotzone: Hotzone = {
-      id: generateId("hz"),
-      audio_id: audioId,
-      start_time: Math.max(0, timestamp - 10),
-      end_time: timestamp + 10,
-      transcript_snippet: "New marked segment - transcription pending...",
-      source: "manual",
-      metadata: {},
-      status: "pending",
-      created_at: new Date().toISOString(),
+  // onMark(timestamp: number): void - 不暂停播放，调用服务层
+  const handleMark = useCallback(async (timestamp: number) => {
+    if (!currentAudioUrl) {
+      console.error("[Player] Cannot mark: no audio URL")
+      alert("Cannot create hotzone: audio URL not available")
+      return
     }
 
-    setHotzones((prev) => [...prev, newHotzone])
-    setSelectedHotzoneId(newHotzone.id)
-  }, [audioId])
+    setIsMarking(true)
+    try {
+      const generateAnchorId = (prefix: string) => `${prefix}_${Math.random().toString(36).substring(2, 11)}`
+
+      const anchor: Anchor = {
+        id: generateAnchorId("anc"),
+        audio_id: audioId,
+        timestamp,
+        source: "manual",
+        created_at: new Date().toISOString(),
+      }
+
+      console.log("[Player] Creating hotzone from anchor at:", timestamp)
+
+      const [newHotzone] = await processAnchorsToHotzones(
+        [anchor],
+        undefined,
+        undefined,
+        currentAudioUrl,
+        undefined,
+        hotzones
+      )
+
+      if (newHotzone) {
+        console.log("[Player] Saving hotzone:", newHotzone.id)
+        await saveHotzone(newHotzone)
+        addHotzone(newHotzone)
+        setSelectedHotzoneId(newHotzone.id)
+        console.log("[Player] Hotzone created successfully")
+      }
+    } catch (error) {
+      console.error("[Player] Failed to create hotzone:", error)
+      alert("Failed to create hotzone. Please try again.")
+    } finally {
+      setIsMarking(false)
+    }
+  }, [audioId, hotzones, addHotzone, currentAudioUrl])
 
   // onHotzoneJump(hotzoneId: string, startTime: number): void
   const handleHotzoneJump = useCallback((hotzoneId: string, startTime: number) => {
@@ -206,13 +298,7 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
   // onHotzoneToggleReviewed(hotzoneId: string, reviewed: boolean): void
   const handleHotzoneToggleReviewed = useCallback(
     (hotzoneId: string, reviewed: boolean) => {
-      setHotzones((prev) =>
-        prev.map((hz) =>
-          hz.id === hotzoneId
-            ? { ...hz, status: reviewed ? "reviewed" : "pending" }
-            : hz
-        )
-      )
+      console.log("[Player] Toggle hotzone reviewed:", hotzoneId, reviewed)
     },
     []
   )
@@ -225,16 +311,51 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
     }
   }, [])
 
+  // 构建 playerState 对象传递给子组件
+  const playerState = {
+    currentTime,
+    duration,
+    isPlaying,
+    playbackRate,
+    volume,
+  }
+
   // ============================================
   // 渲染
   // ============================================
+
+  if (!isMounted) {
+    return (
+      <div className="flex flex-col h-screen bg-background items-center justify-center">
+        <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
+        <div className="text-muted-foreground mt-4">Loading player...</div>
+      </div>
+    )
+  }
+
+  // Check if we have a valid audio URL
+  if (!currentAudioUrl) {
+    return (
+      <div className="flex flex-col h-screen bg-background items-center justify-center">
+        <Music className="w-16 h-16 text-muted-foreground mb-4" />
+        <h2 className="text-xl font-semibold text-foreground mb-2">No Audio URL</h2>
+        <p className="text-muted-foreground mb-6">Please provide an audio URL to play this episode.</p>
+        <Link
+          href="/"
+          className="px-4 py-2 rounded-lg bg-simpod-mark text-simpod-dark font-medium"
+        >
+          Go to Search
+        </Link>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col h-screen bg-background">
       {/* Hidden Audio Element */}
       <audio
         ref={audioRef}
-        src={DEMO_AUDIO_URL}
+        src={currentAudioUrl}
         preload="auto"
         crossOrigin="anonymous"
         className="hidden"
@@ -260,9 +381,9 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
             </div>
             <div>
               <h1 className="text-sm font-semibold text-foreground line-clamp-1">
-                {episode.title}
+                Episode {audioId}
               </h1>
-              <p className="text-xs text-muted-foreground">{podcast.title}</p>
+              <p className="text-xs text-muted-foreground">Simpod Player</p>
             </div>
           </div>
         </div>
@@ -284,6 +405,23 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
         </div>
       </header>
 
+      {/* Audio Error Message */}
+      {audioError && (
+        <div className="mx-4 mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+          <div className="flex items-start gap-2">
+            <AlertCircle size={16} className="text-red-500 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm text-red-500">{audioError}</p>
+              {currentAudioUrl && (
+                <p className="text-xs text-red-400 mt-1 break-all font-mono">
+                  URL: {currentAudioUrl}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left: Player + Transcript */}
@@ -293,11 +431,11 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
             {/* Waveform */}
             <HotzoneWaveform
               hotzones={hotzones}
-              currentTime={playerState.currentTime}
-              duration={playerState.duration}
+              currentTime={currentTime}
+              duration={duration}
               onHotzoneJump={handleHotzoneJump}
               onSeek={handleSeek}
-              isPlaying={playerState.isPlaying}
+              isPlaying={isPlaying}
             />
 
             {/* Controls */}
@@ -312,12 +450,31 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
               </div>
 
               <div className="ml-6">
-                <MarkButtonCompact
-                  currentTime={playerState.currentTime}
-                  onMark={handleMark}
-                />
+                {isMarking ? (
+                  <button
+                    disabled
+                    className="px-6 py-3 rounded-full font-semibold text-sm flex items-center gap-2 bg-muted text-muted-foreground"
+                  >
+                    <Loader2 size={16} className="animate-spin" />
+                    Marking...
+                  </button>
+                ) : (
+                  <MarkButtonCompact
+                    currentTime={currentTime}
+                    onMark={handleMark}
+                    disabled={audioLoading || isMarking || !!audioError}
+                  />
+                )}
               </div>
             </div>
+
+            {/* Audio Loading Indicator */}
+            {audioLoading && !audioError && (
+              <div className="mt-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Loader2 size={14} className="animate-spin" />
+                Loading audio...
+              </div>
+            )}
           </div>
 
           {/* Transcript Section */}
@@ -336,7 +493,7 @@ export function PodcastPlayerPage({ audioId }: PodcastPlayerPageProps) {
               <div className="flex-1 overflow-hidden">
                 <TranscriptStream
                   words={currentTranscriptWords}
-                  currentTime={playerState.currentTime}
+                  currentTime={currentTime}
                   onWordClick={handleWordClick}
                 />
               </div>
