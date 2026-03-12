@@ -3,6 +3,8 @@
  * 访问 /test-env 来验证 Vercel 环境变量是否正确配置
  */
 
+import Link from 'next/link'
+
 export default function TestEnvPage() {
   const envVars = {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || 'NOT_SET',
@@ -37,7 +39,7 @@ export default function TestEnvPage() {
       </div>
 
       <div style={{ marginTop: '2rem' }}>
-        <a href="/" style={{ color: '#00cffd', textDecoration: 'underline' }}>← Back to Home</a>
+        <Link href="/" style={{ color: '#00cffd', textDecoration: 'underline' }}>← Back to Home</Link>
       </div>
     </div>
   )
