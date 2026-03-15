@@ -112,7 +112,6 @@ export const mockHotzones: Hotzone[] = [
     transcript_words: mockWords,
     source: "manual",
     metadata: {
-      transcript_words: mockWords,
       confidence: 0.95,
       difficulty_score: 7,
     },

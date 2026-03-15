@@ -37,6 +37,16 @@ export interface Anchor {
   created_at: string
 }
 
+/** 热区元数据 */
+export interface HotzoneMetadata {
+  confidence?: number
+  difficulty_score?: number
+  user_adjustment_history?: Array<{
+    action: string
+    timestamp: string
+  }>
+}
+
 /** 热区 - 基于锚点生成的音频片段 */
 export interface Hotzone {
   id: string
@@ -49,17 +59,6 @@ export interface Hotzone {
   metadata: HotzoneMetadata
   status: 'pending' | 'reviewed' | 'archived'
   created_at: string
-}
-
-/** 热区元数据 */
-export interface HotzoneMetadata {
-  transcript_words?: Word[]
-  confidence?: number
-  difficulty_score?: number
-  user_adjustment_history?: Array<{
-    action: string
-    timestamp: string
-  }>
 }
 
 /** 转录片段 - 用于缓存和共享 */
@@ -106,6 +105,31 @@ export interface Project {
   pendingCount: number
   lastAccessed: string
 }
+
+// ============================================
+// API 响应类型
+// ============================================
+
+/** API 成功响应 */
+export interface ApiSuccessResponse<T> {
+  success: true
+  data: T
+  timestamp: string
+}
+
+/** API 错误响应 */
+export interface ApiErrorResponse {
+  success: false
+  error: {
+    code: string
+    message: string
+    details?: unknown
+  }
+  timestamp: string
+}
+
+/** API 响应（联合类型） */
+export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse
 
 // ============================================
 // 组件 Props 接口契约
@@ -173,4 +197,30 @@ export interface AppError {
   code: string
   message: string
   details?: unknown
+}
+
+// ============================================
+// 服务返回类型
+// ============================================
+
+/** 转录结果 */
+export interface TranscriptionResult {
+  text: string
+  words: Array<{ word: string; start: number; end: number }>
+}
+
+/** 保存结果 */
+export interface SaveResult {
+  success: boolean
+  error?: string
+}
+
+/** 缓存统计 */
+export interface CacheStats {
+  size: number
+  entries: number
+  hits: number
+  misses: number
+  hitRate: number
+  memoryUsage: number
 }

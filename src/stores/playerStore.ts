@@ -25,6 +25,9 @@ interface PlayerStore extends PlayerState {
   // Audio element ref
   audioRef: HTMLAudioElement | null
   setAudioRef: (ref: HTMLAudioElement | null) => void
+  
+  // 清理方法
+  cleanup: () => void
 }
 
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
@@ -44,7 +47,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const { audioRef } = get()
     if (audioRef) {
       if (playing) {
-        audioRef.play().catch(console.error)
+        audioRef.play().catch((err) => {
+          console.error('[PlayerStore] Failed to play audio:', err)
+          set({ isPlaying: false })
+        })
       } else {
         audioRef.pause()
       }
@@ -113,4 +119,22 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   // Audio ref
   setAudioRef: (ref) => set({ audioRef: ref }),
+
+  // 清理方法：重置状态并清理资源
+  cleanup: () => {
+    const { audioRef } = get()
+    if (audioRef) {
+      audioRef.pause()
+      audioRef.currentTime = 0
+    }
+    set({
+      currentTime: 0,
+      duration: 0,
+      isPlaying: false,
+      playbackRate: 1,
+      volume: 1,
+      hotzones: [],
+      audioRef: null,
+    })
+  },
 }))

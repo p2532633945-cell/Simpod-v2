@@ -29,7 +29,7 @@ import { processAnchorsToHotzones } from "@/services/hotzone"
 import { saveHotzone, fetchHotzones } from "@/services/supabase"
 
 // Mock 数据
-import { mockWords, generateId } from "@/lib/mock-data"
+import { mockWords } from "@/lib/mock-data"
 
 interface PodcastPlayerPageProps {
   audioId: string
@@ -38,25 +38,13 @@ interface PodcastPlayerPageProps {
 
 export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps) {
   // ============================================
-  // 客户端渲染保护 - 防止 hydration 不匹配
-  // ============================================
-  const [isMounted, setIsMounted] = useState(false)
-
-  useEffect(() => {
-    setIsMounted(true)
-  }, [])
-
-  // ============================================
   // 加载状态
   // ============================================
   const [isMarking, setIsMarking] = useState(false)
   const [audioLoading, setAudioLoading] = useState(true)
   const [audioError, setAudioError] = useState<string | null>(null)
-  // Use passed audioUrl - this is the actual podcast episode URL
-  const [currentAudioUrl, setCurrentAudioUrl] = useState<string | undefined>(audioUrl)
 
-  // Log initial audio URL for debugging
-  console.log('[PodcastPlayerPage] Initializing with audioUrl:', audioUrl)
+  console.log('[PodcastPlayerPage] Rendering with audioUrl:', audioUrl)
 
   // ============================================
   // Zustand Store 状态管理
@@ -85,6 +73,7 @@ export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps)
   // 设置 audioRef 到 store
   useEffect(() => {
     if (audioRef.current) {
+      console.log("[Player] Audio element mounted, setting ref to store")
       setAudioRef(audioRef.current)
     }
   }, [setAudioRef])
@@ -92,80 +81,180 @@ export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps)
   // 音频事件处理 - 更新 Zustand store
   useEffect(() => {
     const audio = audioRef.current
-    if (!audio) return
+    if (!audio) {
+      console.log("[Player] Audio element not ready yet")
+      return
+    }
+
+    console.log("[Player] Setting up audio event listeners", {
+      src: audio.src,
+      audioUrl,
+      readyState: audio.readyState,
+      networkState: audio.networkState,
+    })
+
+    // 音频加载超时处理（30秒 - 某些播客服务器响应慢）
+    const loadingTimeout = setTimeout(() => {
+      if (audio.readyState < 2) {
+        console.error("[Player] Audio loading timeout", {
+          readyState: audio.readyState,
+          networkState: audio.networkState,
+          src: audio.src,
+        })
+        setAudioLoading(false)
+        setAudioError("Audio loading timed out (30s). The server may be slow or the URL may be inaccessible.")
+      }
+    }, 30000)
 
     const handleTimeUpdate = () => {
       setCurrentTime(audio.currentTime)
     }
 
     const handleLoadedMetadata = () => {
-      console.log("[Player] Audio loaded, duration:", audio.duration)
+      console.log("[Player] Audio loadedmetadata, duration:", audio.duration)
+      clearTimeout(loadingTimeout)
       setDuration(audio.duration)
       setAudioLoading(false)
       setAudioError(null)
     }
 
     const handlePlay = () => {
+      console.log("[Player] Audio play event")
       setIsPlaying(true)
     }
 
     const handlePause = () => {
+      console.log("[Player] Audio pause event")
       setIsPlaying(false)
     }
 
     const handleEnded = () => {
+      console.log("[Player] Audio ended")
       setIsPlaying(false)
       setCurrentTime(0)
     }
 
     const handleCanPlay = () => {
-      console.log("[Player] Audio can play")
+      console.log("[Player] Audio canplay - ready to play", {
+        duration: audio.duration,
+        readyState: audio.readyState,
+      })
+      clearTimeout(loadingTimeout)
       setAudioLoading(false)
       setAudioError(null)
     }
 
+    const handleCanPlayThrough = () => {
+      console.log("[Player] Audio canplaythrough - fully buffered")
+      clearTimeout(loadingTimeout)
+      setAudioLoading(false)
+      setAudioError(null)
+    }
+
+    const handlePlaying = () => {
+      console.log("[Player] Audio playing - playback started")
+      clearTimeout(loadingTimeout)
+      setAudioLoading(false)
+      setAudioError(null)
+      setIsPlaying(true)
+    }
+
+    const handleWaiting = () => {
+      console.log("[Player] Audio waiting - buffering", {
+        networkState: audio.networkState,
+        readyState: audio.readyState,
+      })
+    }
+
+    const handleStalled = () => {
+      console.warn("[Player] Audio stalled - network stalled", {
+        networkState: audio.networkState,
+        readyState: audio.readyState,
+        src: audio.src,
+      })
+    }
+
     const getAudioErrorMessage = (code?: number): string => {
       const errorMessages: Record<number, string> = {
-        1: "User aborted the audio loading.",
-        2: "A network error occurred while loading the audio.",
-        3: "The audio decoding failed.",
-        4: "The audio format is not supported."
+        1: "Playback was aborted.",
+        2: "A network error occurred while loading the audio. Check your connection or try again.",
+        3: "The audio could not be decoded. The file may be corrupted.",
+        4: "The audio format is not supported by your browser."
       }
       return errorMessages[code || 0] || "Failed to load audio. Please try again."
     }
 
     const handleError = (e: Event) => {
-      const audio = e.target as HTMLAudioElement
+      clearTimeout(loadingTimeout)
+      const target = e.target as HTMLAudioElement
+      const errorCode = target.error?.code
+      const errorMessage = getAudioErrorMessage(errorCode)
+      
       console.error("[Player] Audio error:", {
-        error: audio.error,
-        code: audio.error?.code,
-        message: audio.error?.message,
-        src: audio.src,
-        networkState: audio.networkState,
-        readyState: audio.readyState
+        audioUrl,
+        errorCode,
+        errorMessage,
+        networkState: target.networkState,
+        readyState: target.readyState,
+        src: target.src,
       })
+      
       setAudioLoading(false)
-      setAudioError(getAudioErrorMessage(audio.error?.code))
+      setAudioError(errorMessage)
     }
 
+    const handleLoadStart = () => {
+      console.log("[Player] Audio loadstart", {
+        src: audio.src,
+        networkState: audio.networkState,
+      })
+      // 重置加载状态，确保每次新的 src 加载时状态正确
+      setAudioLoading(true)
+      setAudioError(null)
+    }
+
+    const handleProgress = () => {
+      if (audio.buffered.length > 0) {
+        const bufferedEnd = audio.buffered.end(audio.buffered.length - 1)
+        console.log("[Player] Audio progress:", {
+          buffered: bufferedEnd.toFixed(1) + 's',
+          duration: audio.duration?.toFixed(1) + 's',
+          percent: audio.duration ? ((bufferedEnd / audio.duration) * 100).toFixed(0) + '%' : 'unknown',
+        })
+      }
+    }
+
+    audio.addEventListener("loadstart", handleLoadStart)
+    audio.addEventListener("progress", handleProgress)
     audio.addEventListener("timeupdate", handleTimeUpdate)
     audio.addEventListener("loadedmetadata", handleLoadedMetadata)
     audio.addEventListener("canplay", handleCanPlay)
+    audio.addEventListener("canplaythrough", handleCanPlayThrough)
+    audio.addEventListener("playing", handlePlaying)
+    audio.addEventListener("waiting", handleWaiting)
+    audio.addEventListener("stalled", handleStalled)
     audio.addEventListener("play", handlePlay)
     audio.addEventListener("pause", handlePause)
     audio.addEventListener("ended", handleEnded)
     audio.addEventListener("error", handleError)
 
     return () => {
+      clearTimeout(loadingTimeout)
+      audio.removeEventListener("loadstart", handleLoadStart)
+      audio.removeEventListener("progress", handleProgress)
       audio.removeEventListener("timeupdate", handleTimeUpdate)
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata)
       audio.removeEventListener("canplay", handleCanPlay)
+      audio.removeEventListener("canplaythrough", handleCanPlayThrough)
+      audio.removeEventListener("playing", handlePlaying)
+      audio.removeEventListener("waiting", handleWaiting)
+      audio.removeEventListener("stalled", handleStalled)
       audio.removeEventListener("play", handlePlay)
       audio.removeEventListener("pause", handlePause)
       audio.removeEventListener("ended", handleEnded)
       audio.removeEventListener("error", handleError)
     }
-  }, [setCurrentTime, setDuration, setIsPlaying, currentAudioUrl])
+  }, [setCurrentTime, setDuration, setIsPlaying, audioUrl])
 
   // 加载当前 audio_id 的热区 - 从数据库
   useEffect(() => {
@@ -192,10 +281,15 @@ export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps)
       }
     }
 
-    if (isMounted) {
-      loadHotzones()
+    loadHotzones()
+
+    // 清理：当组件卸载或 audioId 变化时，清理状态
+    return () => {
+      if (audioId) {
+        console.log("[Player] Cleaning up for audioId:", audioId)
+      }
     }
-  }, [audioId, addHotzone, isMounted])
+  }, [audioId, addHotzone])
 
   // 获取当前热区的转录词
   const currentTranscriptWords: Word[] = useMemo(() => {
@@ -242,7 +336,7 @@ export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps)
 
   // onMark(timestamp: number): void - 不暂停播放，调用服务层
   const handleMark = useCallback(async (timestamp: number) => {
-    if (!currentAudioUrl) {
+    if (!audioUrl) {
       console.error("[Player] Cannot mark: no audio URL")
       alert("Cannot create hotzone: audio URL not available")
       return
@@ -266,7 +360,7 @@ export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps)
         [anchor],
         undefined,
         undefined,
-        currentAudioUrl,
+        audioUrl,
         undefined,
         hotzones
       )
@@ -284,7 +378,7 @@ export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps)
     } finally {
       setIsMarking(false)
     }
-  }, [audioId, hotzones, addHotzone, currentAudioUrl])
+  }, [audioId, hotzones, addHotzone, audioUrl])
 
   // onHotzoneJump(hotzoneId: string, startTime: number): void
   const handleHotzoneJump = useCallback((hotzoneId: string, startTime: number) => {
@@ -324,17 +418,8 @@ export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps)
   // 渲染
   // ============================================
 
-  if (!isMounted) {
-    return (
-      <div className="flex flex-col h-screen bg-background items-center justify-center">
-        <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
-        <div className="text-muted-foreground mt-4">Loading player...</div>
-      </div>
-    )
-  }
-
   // Check if we have a valid audio URL
-  if (!currentAudioUrl) {
+  if (!audioUrl) {
     return (
       <div className="flex flex-col h-screen bg-background items-center justify-center">
         <Music className="w-16 h-16 text-muted-foreground mb-4" />
@@ -352,12 +437,12 @@ export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps)
 
   return (
     <div className="flex flex-col h-screen bg-background">
-      {/* Hidden Audio Element */}
+      {/* Hidden Audio Element - always render, never destroy */}
+      {/* 通过 audio-proxy 加载以解决 CORS 问题 */}
       <audio
         ref={audioRef}
-        src={currentAudioUrl}
+        src={`/api/audio-proxy?url=${encodeURIComponent(audioUrl)}`}
         preload="auto"
-        crossOrigin="anonymous"
         className="hidden"
       />
 
@@ -412,9 +497,9 @@ export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps)
             <AlertCircle size={16} className="text-red-500 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm text-red-500">{audioError}</p>
-              {currentAudioUrl && (
+              {audioUrl && (
                 <p className="text-xs text-red-400 mt-1 break-all font-mono">
-                  URL: {currentAudioUrl}
+                  URL: {audioUrl}
                 </p>
               )}
             </div>

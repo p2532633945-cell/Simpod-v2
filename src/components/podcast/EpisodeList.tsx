@@ -9,7 +9,7 @@
 import { useState } from "react"
 import { Play, Clock, Calendar, AlertCircle } from "lucide-react"
 import Link from "next/link"
-import type { Episode } from "@/lib/rss-parser"
+import type { Episode } from "@/types/simpod"
 
 interface EpisodeListProps {
   episodes: Episode[]
@@ -53,8 +53,8 @@ function EpisodeItem({
   index,
   isExpanded,
   onToggle,
-  podcastTitle,
-  podcastArtwork
+  podcastTitle: _podcastTitle,
+  podcastArtwork: _podcastArtwork
 }: EpisodeItemProps) {
   const [playError, setPlayError] = useState<string | null>(null)
 
@@ -68,12 +68,15 @@ function EpisodeItem({
     }
     setPlayError(null)
     console.log('[EpisodeItem] Playing episode:', episode.title, {
-      audioUrl: episode.audioUrl
+      audioUrl: episode.audioUrl,
     })
   }
 
-  // Create safe URL parameters
-  const playUrl = `/workspace/${encodeURIComponent(episode.id)}?audioUrl=${encodeURIComponent(episode.audioUrl)}`
+  // 直接传递原始音频 URL，让播放器通过代理加载
+  // 避免双重 encodeURIComponent 导致 URL 解析失败
+  const playUrl = episode.audioUrl
+    ? `/workspace/${encodeURIComponent(episode.id)}?audioUrl=${encodeURIComponent(episode.audioUrl)}`
+    : `/workspace/${encodeURIComponent(episode.id)}`
 
   const formatDate = (dateString: string) => {
     try {

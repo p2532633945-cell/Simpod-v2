@@ -11,7 +11,7 @@ import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import { podcastManager } from "@/services/podcast-manager"
 import { EpisodeList } from "@/components/podcast/EpisodeList"
-import { ArrowLeft, Loader2 } from "lucide-react"
+import { ArrowLeft, Loader2, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import type { Podcast, Episode } from "@/types/simpod"
 
@@ -37,7 +37,7 @@ export default function PodcastPage() {
       }
 
       try {
-        console.log('[Podcast Page] Fetching podcast via PodcastManager:', feedUrl)
+        console.log('[Podcast Page] Fetching podcast:', feedUrl)
         const result = await podcastManager.getPodcast(feedUrl, {
           title: title || 'Unknown Podcast',
           author: author || 'Unknown Author',
@@ -50,8 +50,8 @@ export default function PodcastPage() {
         console.log('[Podcast Page] Loaded successfully:', {
           podcastTitle: result.podcast.title,
           episodeCount: result.episodes.length,
-          firstEpisodeAudioUrl: result.episodes[0]?.audioUrl
         })
+
       } catch (err: any) {
         console.error('[Podcast Page] Error:', err)
         setError(err.message || 'Failed to load podcast')
@@ -99,7 +99,7 @@ export default function PodcastPage() {
           <p className="text-muted-foreground mb-4">
             {error || 'Unable to fetch podcast feed'}
           </p>
-          <div className="flex gap-3 justify-center">
+          <div className="flex gap-3 justify-center mb-4">
             <Link
               href="/"
               className="px-4 py-2 rounded-lg bg-simpod-mark text-simpod-dark font-medium"
@@ -158,9 +158,6 @@ export default function PodcastPage() {
               <span className="bg-secondary px-2 py-1 rounded">
                 {episodes.length} episodes
               </span>
-              {title && podcast.title === 'Mock Podcast' && (
-                <span className="text-xs text-amber-500">Using mock episodes (RSS unavailable)</span>
-              )}
             </div>
           </div>
         </div>

@@ -19,16 +19,6 @@ export const saveHotzone = async (hotzone: Hotzone) => {
   // Create a copy to avoid mutating original object used in UI
   const payload = { ...hotzone };
 
-  // If transcript_words exists at top level, move it to metadata
-  if (payload.transcript_words) {
-      payload.metadata = {
-          ...payload.metadata,
-          transcript_words: payload.transcript_words
-      };
-      // Remove top-level property so Supabase doesn't complain about missing column
-      delete (payload as any).transcript_words;
-  }
-
   try {
     const { data, error } = await supabase
       .from('hotzones')
@@ -136,39 +126,80 @@ export const fetchHotzones = async (audioId: string): Promise<Hotzone[]> => {
 /**
  * 查找已存在的转录
  *
- * 查找覆盖请求范围的转录片段
- * 容差：±1秒
+ * 改进：
+ * - 区分"无结果"和"查询失败"
+ * - 添加重试机制
+ * - 返回详细的查询结果
  */
-export const findExistingTranscript = async (audioId: string, startTime: number, endTime: number): Promise<TranscriptSegment | null> => {
+export const findExistingTranscript = async (
+    audioId: string,
+    startTime: number,
+    endTime: number,
+    retries = 1
+): Promise<TranscriptSegment | null> => {
     const supabase = createClient();
 
-    // Look for any transcript that overlaps with requested range
-    // We will do a smarter client-side check after fetching candidates.
-    // Fetch any transcript where (start <= requested_end) AND (end >= requested_start)
-    const { data, error } = await supabase
-      .from('transcripts')
-      .select('*')
-      .eq('audio_id', audioId)
-      .lte('start_time', endTime)
-      .gte('end_time', startTime);
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            // Fetch any transcript where (start <= requested_end) AND (end >= requested_start)
+            const { data, error } = await supabase
+              .from('transcripts')
+              .select('*')
+              .eq('audio_id', audioId)
+              .lte('start_time', endTime)
+              .gte('end_time', startTime);
 
-    if (error) {
-      console.error('Error finding transcript:', error);
-      return null;
-    }
+            if (error) {
+                // 业务错误
+                const errorInfo = {
+                    message: String(error.message || 'Unknown error'),
+                    code: String(error.code || 'UNKNOWN'),
+                    audioId,
+                    timeRange: `${startTime}-${endTime}`
+                };
+                console.error('[Supabase] Error finding transcript:', errorInfo);
+                
+                // 网络错误则重试
+                if (error.message?.includes('fetch') && attempt < retries) {
+                    const delay = Math.pow(2, attempt) * 500;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    continue;
+                }
+                return null;
+            }
 
-    // Find the best match: one that fully covers the requested range
-    if (data && data.length > 0) {
-        // Tolerance: 1 second
-        const perfectMatch = data.find((t: TranscriptSegment) =>
-            t.start_time <= startTime + 1 &&
-            t.end_time >= endTime - 1
-        );
-        if (perfectMatch) return perfectMatch;
+            // 查询成功，查找最佳匹配
+            if (data && data.length > 0) {
+                // Tolerance: 1 second
+                const perfectMatch = data.find((t: TranscriptSegment) =>
+                    t.start_time <= startTime + 1 &&
+                    t.end_time >= endTime - 1
+                );
+                if (perfectMatch) {
+                    console.log(`[Supabase] Found transcript match: ${audioId} [${startTime}-${endTime}]`);
+                    return perfectMatch;
+                }
+            }
 
-        // Future TODO: Stitch multiple partial transcripts together?
-        // For MVP, if no single transcript covers the whole range, we treat it as a "miss" and re-transcribe.
-        // Or we could return the best partial match, but that might lead to incomplete sentences.
+            console.log(`[Supabase] No transcript match found: ${audioId} [${startTime}-${endTime}]`);
+            return null;
+
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Unknown error';
+            console.error('[Supabase] Exception finding transcript:', {
+                message,
+                audioId,
+                timeRange: `${startTime}-${endTime}`,
+                attempt: attempt + 1
+            });
+            
+            if (attempt < retries) {
+                const delay = Math.pow(2, attempt) * 500;
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue;
+            }
+            return null;
+        }
     }
 
     return null;
@@ -176,30 +207,75 @@ export const findExistingTranscript = async (audioId: string, startTime: number,
 
 /**
  * 保存转录到共享缓存
+ * 
+ * 改进：
+ * - 区分网络错误和业务错误
+ * - 添加重试机制
+ * - 返回成功/失败状态
  */
 export const saveTranscript = async (
     audioId: string,
     startTime: number,
     endTime: number,
     text: string,
-    words: any
-): Promise<void> => {
+    words: any,
+    retries = 2
+): Promise<{ success: boolean; error?: string }> => {
     const supabase = createClient();
 
-    const { error } = await supabase
-      .from('transcripts')
-      .upsert({
-          audio_id: audioId,
-          start_time: startTime,
-          end_time: endTime,
-          text,
-          words
-      }, { onConflict: 'audio_id,start_time,end_time' })
-      .select()
-      .single();
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            const { error } = await supabase
+              .from('transcripts')
+              .upsert({
+                  audio_id: audioId,
+                  start_time: startTime,
+                  end_time: endTime,
+                  text,
+                  words
+              }, { onConflict: 'audio_id,start_time,end_time' })
+              .select()
+              .single();
 
-    if (error) {
-        console.error('Error saving transcript:', error);
-        // Don't throw, just log. Saving transcript is a side-effect optimization.
+            if (error) {
+                // 业务错误（如约束冲突）
+                const errorInfo = {
+                    message: String(error.message || 'Unknown error'),
+                    code: String(error.code || 'UNKNOWN'),
+                    details: String(error.details || 'No details'),
+                    audioId,
+                    timeRange: `${startTime}-${endTime}`
+                };
+                console.error('[Supabase] Error saving transcript:', errorInfo);
+                return { success: false, error: error.message };
+            }
+
+            console.log(`[Supabase] Transcript saved: ${audioId} [${startTime}-${endTime}]`);
+            return { success: true };
+
+        } catch (err) {
+            // 网络错误或其他异常
+            const message = err instanceof Error ? err.message : 'Unknown error';
+            const isNetworkError = message.includes('fetch') || message.includes('network');
+            
+            if (isNetworkError && attempt < retries) {
+                // 网络错误，重试
+                const delay = Math.pow(2, attempt) * 1000; // 指数退避
+                console.warn(`[Supabase] Network error, retrying in ${delay}ms...`, message);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue;
+            }
+
+            // 最后一次尝试或非网络错误
+            console.error('[Supabase] Failed to save transcript after retries:', {
+                message,
+                audioId,
+                timeRange: `${startTime}-${endTime}`,
+                attempts: attempt + 1
+            });
+            return { success: false, error: message };
+        }
     }
+
+    return { success: false, error: 'Max retries exceeded' };
 };

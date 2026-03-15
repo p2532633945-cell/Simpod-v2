@@ -291,7 +291,10 @@ export const processAnchorsToHotzones = async (
             const result = await transcribeAudio(audioSlice);
             text = result.text;
             words = result.words;
-            await saveTranscript(hz.audio_id, hz.start_time, hz.end_time, text, words);
+            const saveResult = await saveTranscript(hz.audio_id, hz.start_time, hz.end_time, text, words);
+            if (!saveResult.success) {
+                console.warn(`[Cache] Failed to save transcript for ${hz.id}: ${saveResult.error}`);
+            }
         }
 
         if (words && words.length > 0) {

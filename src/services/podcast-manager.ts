@@ -7,9 +7,8 @@
  * - model 模块：数据模型
  */
 
-import { parseFeed } from '@/lib/rss-parser'
-import { validateAudioUrl, testAudioUrl } from '@/lib/audio-validator'
-import { MOCK_EPISODES } from '@/lib/mock-episodes'
+import { parseFeed } from '@/lib/rss-parser-v2'
+import { validateAudioUrl } from '@/lib/audio-validator'
 
 // 本地类型定义（避免循环依赖）
 interface Podcast {
@@ -65,60 +64,41 @@ export class PodcastManager {
 
     console.log('[PodcastManager] Fetching podcast:', feedUrl)
 
-    try {
-      // 尝试解析 feed
-      const result = await parseFeed(feedUrl)
+    // 解析 RSS feed - 不再静默 fallback，让错误向上传播
+    const result = await parseFeed(feedUrl)
 
-      // 验证音频 URL
-      const validEpisodes = result.episodes.map(ep => ({
-        ...ep,
-        audioUrl: validateAudioUrl(ep.audioUrl).cleanedUrl
-      }))
+    // 验证音频 URL
+    const validEpisodes = result.episodes.map(ep => ({
+      ...ep,
+      audioUrl: validateAudioUrl(ep.audioUrl).cleanedUrl
+    }))
 
-      const data: PodcastWithEpisodes = {
-        podcast: {
-          id: result.podcast.id,
-          title: result.podcast.title,
-          author: result.podcast.author,
-          feedUrl: result.podcast.feedUrl,
-          artwork: result.podcast.artwork,
-          description: result.podcast.description,
-          source: 'rss' as const
-        },
-        episodes: validEpisodes
-      }
-
-      // 缓存结果
-      this.cache.set(feedUrl, {
-        data,
-        timestamp: Date.now()
-      })
-
-      console.log('[PodcastManager] Cached podcast:', data.podcast.title)
-
-      return data
-    } catch (error) {
-      console.warn('[PodcastManager] RSS parse failed, using mock episodes:', error)
-
-      // Fallback 到 mock 数据
-      const data: PodcastWithEpisodes = {
-        podcast: {
-          id: 'mock-podcast',
-          title: podcastInfo?.title || 'Mock Podcast',
-          author: podcastInfo?.author || 'Mock Author',
-          feedUrl,
-          artwork: podcastInfo?.artwork || '',
-          description: podcastInfo?.description || '',
-          source: 'rss' as const
-        },
-        episodes: MOCK_EPISODES
-      }
-
-      // 不缓存 mock 数据，下次重试真实 feed
-      console.log('[PodcastManager] Using mock episodes for testing')
-
-      return data
+    const data: PodcastWithEpisodes = {
+      podcast: {
+        id: result.podcast.id,
+        title: result.podcast.title || podcastInfo?.title || 'Unknown Podcast',
+        author: result.podcast.author || podcastInfo?.author || '',
+        feedUrl: result.podcast.feedUrl,
+        artwork: result.podcast.artwork || podcastInfo?.artwork || '',
+        description: result.podcast.description || podcastInfo?.description || '',
+        source: 'rss' as const
+      },
+      episodes: validEpisodes
     }
+
+    // 缓存结果
+    this.cache.set(feedUrl, {
+      data,
+      timestamp: Date.now()
+    })
+
+    console.log('[PodcastManager] Loaded:', {
+      title: data.podcast.title,
+      episodes: validEpisodes.length,
+      firstAudioUrl: validEpisodes[0]?.audioUrl
+    })
+
+    return data
   }
 
   /**

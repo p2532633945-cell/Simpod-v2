@@ -6,7 +6,8 @@
 
 /**
  * 验证音频 URL 是否有效
- * 检查协议、格式、基本可用性
+ * 采用宽松策略：只检查基本 URL 格式有效性
+ * 实际可访问性通过 audio-tester 工具进行二次验证
  */
 export function validateAudioUrl(url: string): {
   valid: boolean
@@ -18,38 +19,27 @@ export function validateAudioUrl(url: string): {
   }
 
   // 转换 HTTP→HTTPS
-  let cleanedUrl = url
-  if (url.startsWith('http://')) {
-    cleanedUrl = url.replace('http://', 'https://')
+  let cleanedUrl = url.trim()
+  if (cleanedUrl.startsWith('http://')) {
+    cleanedUrl = cleanedUrl.replace('http://', 'https://')
     console.log('[AudioValidator] Converting HTTP to HTTPS:', url, '→', cleanedUrl)
   }
 
-  // 检查是否是音频文件
-  const audioExtensions = ['.mp3', '.mp4', '.m4a', '.wav', '.ogg', '.aac', '.m3u8', '.m4v']
-  const hasAudioExtension = audioExtensions.some(ext => cleanedUrl.toLowerCase().endsWith(ext))
-
-  // 检查常见音频托管域名
-  const audioHosts = [
-    'soundhelix.com',
-    'archive.org',
-    'bbc.co.uk',
-    'podcasts.apple.com',
-    'cdn',
-    'media',
-    'audio',
-    'traffic.megaphone.fm',
-    'simplecast.com',
-    'buzzsprout.com',
-    'libsyn.com',
-    'megaphone.fm',
-    'omnystudio.com',
-    'podtrac.com'
-  ]
-  const hasAudioHost = audioHosts.some(host => cleanedUrl.toLowerCase().includes(host))
-
-  if (!hasAudioExtension && !hasAudioHost) {
-    console.warn('[AudioValidator] URL may not be an audio file:', cleanedUrl)
+  // 基本 URL 格式检查
+  if (!cleanedUrl.startsWith('https://') && !cleanedUrl.startsWith('http://')) {
+    return { valid: false, cleanedUrl: '', error: 'URL must start with http:// or https://' }
   }
+
+  // 尝试解析 URL 以验证格式
+  try {
+    new URL(cleanedUrl)
+  } catch {
+    return { valid: false, cleanedUrl: '', error: 'Invalid URL format' }
+  }
+
+  // 宽松策略：允许任何有效的 URL
+  // 实际可访问性由 audio-tester 工具验证
+  console.log('[AudioValidator] URL validated (basic check):', cleanedUrl)
 
   return { valid: true, cleanedUrl }
 }

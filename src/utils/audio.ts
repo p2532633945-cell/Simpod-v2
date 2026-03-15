@@ -1,30 +1,28 @@
 /**
  * Slices an audio file (Blob/File) from start time to end time.
- * This implementation uses the Web Audio API for precise slicing,
- * or falls back to simple Blob slicing if the format allows (though Blob slicing is often inaccurate for variable bitrate).
- * For a robust browser-based solution without re-encoding, we might need ffmpeg.wasm,
- * but for a lightweight MVP, we will use AudioContext to decode, slice, and re-encode to WAV.
+ * 
+ * 改进：
+ * - 使用 AudioContextPool 复用 AudioContext
+ * - 自动释放资源
+ * - 改进错误处理
  */
+
+import { getAudioContextPool } from '@/lib/audio-context-pool';
 
 /**
  * Fetches a slice of a remote audio file using our custom Vercel Proxy.
  * This handles CORS, Mixed Content, and Range Requests robustly.
  */
 export const sliceRemoteAudio = async (url: string, startTime: number, endTime: number): Promise<Blob> => {
-    // 1. Estimate End Byte
-    // We fetch from byte 0 to the end of the segment to ensure we get the file header.
-    // This allows AudioContext.decodeAudioData to work correctly (it needs headers).
-    // It's less efficient than a precise range but much more robust than trying to decode a headerless chunk.
-    const BITRATE_ESTIMATE = 32 * 1024; // 32KB/s (256kbps) - Conservative high estimate
+    const BITRATE_ESTIMATE = 32 * 1024; // 32KB/s (256kbps)
     const BUFFER_SECONDS = 10;
     const endByte = Math.floor((endTime + BUFFER_SECONDS) * BITRATE_ESTIMATE);
 
-    // 2. Use our custom Vercel Proxy
-    // Note: In development (localhost), this calls the local API route.
-    // In production, it calls the deployed Vercel Function.
     const proxyUrl = `/api/audio-proxy?url=${encodeURIComponent(url)}`;
 
     console.log(`[RemoteSlice] Fetching 0-${endByte} bytes from ${url} via /api/audio-proxy...`);
+
+    let audioContext: AudioContext | null = null;
 
     try {
         const response = await fetch(proxyUrl, {
@@ -46,28 +44,46 @@ export const sliceRemoteAudio = async (url: string, startTime: number, endTime: 
         const arrayBuffer = await response.arrayBuffer();
         console.log(`[RemoteSlice] Downloaded ${arrayBuffer.byteLength} bytes.`);
 
-        // 3. Decode the partial file (Header is present since we started at 0)
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        // 从对象池获取 AudioContext
+        const pool = getAudioContextPool();
+        audioContext = pool.getContext();
 
         // Decode might fail if the file is truncated mid-frame, but usually browsers handle it.
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         console.log(`[RemoteSlice] Decoded audio duration: ${audioBuffer.duration.toFixed(2)}s`);
 
         // 4. Slice to the exact requested time
-        return sliceAudioBuffer(audioBuffer, startTime, endTime, audioContext);
+        const result = sliceAudioBuffer(audioBuffer, startTime, endTime, audioContext);
+
+        // 释放 AudioContext 回对象池
+        pool.releaseContext(audioContext);
+
+        return result;
 
     } catch (e) {
+        // 确保释放资源
+        if (audioContext) {
+            const pool = getAudioContextPool();
+            pool.releaseContext(audioContext);
+        }
         console.error("Remote slice failed:", e);
         throw e;
     }
 }
 
 export const sliceAudio = async (file: File, startTime: number, endTime: number): Promise<Blob> => {
-  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-  const arrayBuffer = await file.arrayBuffer();
-  const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+  const pool = getAudioContextPool();
+  const audioContext = pool.getContext();
 
-  return sliceAudioBuffer(audioBuffer, startTime, endTime, audioContext);
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+    const result = sliceAudioBuffer(audioBuffer, startTime, endTime, audioContext);
+    return result;
+  } finally {
+    // 确保释放资源
+    pool.releaseContext(audioContext);
+  }
 };
 
 const sliceAudioBuffer = async (audioBuffer: AudioBuffer, startTime: number, endTime: number, audioContext: AudioContext): Promise<Blob> => {
