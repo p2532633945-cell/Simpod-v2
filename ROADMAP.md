@@ -35,7 +35,7 @@ Phase 4: 性能优化和 ML 改进 ⏳ 待开始
 
 **状态**：⏳ 进行中
 **预计完成**：5-6 小时
-**计划文件**：`.cursor/plans/phase_3_核心功能完善_-_热区隔离、复盘界面、用户系统_464ee1d4.plan.md`
+**计划文件**：`.plans/phase_3_核心功能完善.plan.md`
 
 ### 任务优先级
 
@@ -109,7 +109,7 @@ Phase 4: 性能优化和 ML 改进 ⏳ 待开始
 /prime
 
 # 2. 查看当前计划
-cat .cursor/plans/phase_3_核心功能完善_-_热区隔离、复盘界面、用户系统_464ee1d4.plan.md
+cat .plans/phase_3_核心功能完善.plan.md
 
 # 3. 执行计划
 /execute phase_3_核心功能完善_-_热区隔离、复盘界面、用户系统_464ee1d4.plan.md
@@ -150,3 +150,4 @@ cat WORKFLOW_GUIDE.md
 
 **最后更新**：2026-03-15
 **版本**：1.0
+
