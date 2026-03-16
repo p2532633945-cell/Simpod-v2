@@ -300,12 +300,18 @@ export const processAnchorsToHotzones = async (
         if (words && words.length > 0) {
             const firstWord = words[0];
             const lastWord = words[words.length - 1];
-            const relativeStart = firstWord.start;
-            const relativeEnd = lastWord.end;
-            const newStartTime = hz.start_time + relativeStart;
-            const newEndTime = hz.start_time + relativeEnd;
 
-            console.log(`[Magnet] Refined ${hz.id}: ${hz.start_time.toFixed(2)}->${newStartTime.toFixed(2)}`);
+            // P0-2 优化：根据转录词实际时长动态调整热区时间范围
+            // 在原始切片时间基础上加上词的相对偏移，并加前后各 2s buffer
+            const BUFFER = 2;
+            const transcriptRelativeStart = firstWord.start;
+            const transcriptRelativeEnd = lastWord.end;
+
+            // 以锚点附近开始（含 buffer）而非纯机械 ±10s
+            const newStartTime = Math.max(0, hz.start_time + transcriptRelativeStart - BUFFER);
+            const newEndTime = hz.start_time + transcriptRelativeEnd + BUFFER;
+
+            console.log(`[P0-2] Refined ${hz.id}: [${hz.start_time.toFixed(2)}, ${hz.end_time.toFixed(2)}] -> [${newStartTime.toFixed(2)}, ${newEndTime.toFixed(2)}] (transcript duration: ${(transcriptRelativeEnd - transcriptRelativeStart).toFixed(2)}s)`);
 
             return {
                 ...hz,

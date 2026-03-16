@@ -6,7 +6,7 @@
  * 显示 Podcast URL/搜索输入和最近项目
  */
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import Link from "next/link"
 import {
   Search,
@@ -17,11 +17,15 @@ import {
   Podcast,
   Settings,
   AlertCircle,
+  LogIn,
+  LogOut,
+  User,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { mockProjects, formatDate } from "@/lib/mock-data"
 import { searchPodcasts } from "@/lib/podcast-search"
 import type { Project, Podcast as PodcastType } from "@/types/simpod"
+import { useAuthStore } from "@/stores/authStore"
 
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -29,6 +33,14 @@ export default function HomePage() {
   const [searchResults, setSearchResults] = useState<PodcastType[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
+
+  const { user, signOut, initialize } = useAuthStore()
+
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined
+    initialize().then((fn) => { unsubscribe = fn })
+    return () => { unsubscribe?.() }
+  }, [initialize])
 
   const handleSearch = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -107,6 +119,29 @@ export default function HomePage() {
             >
               <Settings size={18} />
             </Link>
+            {user ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground hidden md:block max-w-[120px] truncate" title={user.email}>
+                  <User size={12} className="inline mr-1" />{user.email}
+                </span>
+                <button
+                  onClick={signOut}
+                  className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                  aria-label="登出"
+                  title="Sign out"
+                >
+                  <LogOut size={18} />
+                </button>
+              </div>
+            ) : (
+              <Link
+                href="/auth"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm bg-simpod-mark/10 text-simpod-primary hover:bg-simpod-mark/20 transition-colors"
+              >
+                <LogIn size={16} />
+                <span className="hidden md:inline">Sign In</span>
+              </Link>
+            )}
           </nav>
         </div>
       </header>

@@ -62,6 +62,7 @@ export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps)
     setIsPlaying,
     setAudioRef,
     addHotzone,
+    setHotzones,
   } = usePlayerStore()
 
   // 本地状态：选中热区（UI 状态不需要放入 store）

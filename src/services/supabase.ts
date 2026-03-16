@@ -17,7 +17,14 @@ export const saveHotzone = async (hotzone: Hotzone) => {
   const supabase = createClient();
 
   // Create a copy to avoid mutating original object used in UI
-  const payload = { ...hotzone };
+  const payload: Record<string, unknown> = { ...hotzone };
+
+  // P1-4: 关联当前登录用户
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    payload.user_id = user.id;
+    console.log('[Supabase] Attaching user_id to hotzone:', user.id);
+  }
 
   // 关键修复：将 transcript_words 从顶层移到 metadata 中
   // 数据库 schema 中 transcript_words 不是顶层列，而是在 metadata JSONB 中
@@ -86,6 +93,69 @@ export const saveAnchor = async (anchor: Anchor) => {
 };
 
 /**
+ * 获取所有热区（复盘页面用）
+ *
+ * 将 metadata.transcript_words 拉到顶层供UI使用
+ */
+export const fetchAllHotzones = async (): Promise<Hotzone[]> => {
+  const supabase = createClient();
+
+  try {
+    // P1-4: 只获取当前用户的热区
+    const { data: { user } } = await supabase.auth.getUser();
+    let query = supabase
+      .from('hotzones')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (user) {
+      query = query.eq('user_id', user.id);
+    }
+    const { data, error } = await query;
+
+    if (error) {
+      const errorInfo = {
+        message: String(error.message || 'Unknown error'),
+        code: String(error.code || 'UNKNOWN'),
+      };
+      console.error('[Supabase] Error fetching all hotzones:', errorInfo);
+      throw new Error(errorInfo.message);
+    }
+
+    return (data as any[]).map(hz => {
+      if (hz.metadata && hz.metadata.transcript_words) {
+        return { ...hz, transcript_words: hz.metadata.transcript_words };
+      }
+      return hz;
+    }) as Hotzone[];
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[Supabase] fetchAllHotzones exception:', { message });
+    throw err;
+  }
+};
+
+/**
+ * 更新热区状态
+ */
+export const updateHotzoneStatus = async (
+  hotzoneId: string,
+  status: 'pending' | 'reviewed' | 'archived'
+): Promise<void> => {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from('hotzones')
+    .update({ status })
+    .eq('id', hotzoneId);
+
+  if (error) {
+    console.error('[Supabase] Error updating hotzone status:', { message: error.message, hotzoneId });
+    throw new Error(error.message);
+  }
+  console.log(`[Supabase] Hotzone ${hotzoneId} status updated to: ${status}`);
+};
+
+/**
  * 获取指定音频的所有热区
  *
  * 将 metadata.transcript_words 拉到顶层供UI使用
@@ -94,11 +164,17 @@ export const fetchHotzones = async (audioId: string): Promise<Hotzone[]> => {
   const supabase = createClient();
 
   try {
-    const { data, error } = await supabase
+    // P1-4: 只获取当前用户的热区
+    const { data: { user } } = await supabase.auth.getUser();
+    let query = supabase
       .from('hotzones')
       .select('*')
       .eq('audio_id', audioId)
       .order('start_time', { ascending: true });
+    if (user) {
+      query = query.eq('user_id', user.id);
+    }
+    const { data, error } = await query;
 
     if (error) {
       // Extract error info early to avoid serialization issues
