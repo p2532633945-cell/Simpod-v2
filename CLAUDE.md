@@ -8,9 +8,9 @@
 
 ### 必读文档（按顺序）
 
-1. **本文档** — 技术规则、架构和防坑准则
-2. **[PROGRESS.md](PROGRESS.md)** — ⭐ 项目进度（多工具协作必读）
-3. **[WORKFLOW_GUIDE.md](WORKFLOW_GUIDE.md)** — 工作流命令参考
+1. **[ROADMAP.md](ROADMAP.md)** — 全局计划总览（从这里开始）`n2. **本文档** — 技术规则、架构和防坑准则
+3. **[PROGRESS.md](PROGRESS.md)** — ⭐ 项目进度（多工具协作必读）
+4. **[WORKFLOW_GUIDE.md](WORKFLOW_GUIDE.md)** — 工作流命令参考
 
 ### 标准开发流程
 
@@ -246,3 +246,4 @@ GROQ_API_KEY=
 
 **最后更新**：2026-03-15
 **版本**：3.1（5 条防坑准则完整版）
+
