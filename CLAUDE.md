@@ -1,961 +1,248 @@
 # Simpod Developer Guide
 
-> **重要提示**：这是项目的"单一事实来源"(SSOT)。在开始任何开发任务前，请先阅读本文档。
->
-> **新工作流系统**：本项目采用系统化的开发工作流，详见 [WORKFLOW_GUIDE.md](WORKFLOW_GUIDE.md)。
+> **单一事实来源 (SSOT)**：开始任何开发任务前必须阅读本文档。
 
 ---
 
 ## 快速开始
 
-### 首次开发？请按顺序阅读
+### 必读文档（按顺序）
 
-1. **[WORKFLOW_GUIDE.md](WORKFLOW_GUIDE.md)** - 了解我们的工作流程和命令系统
-2. **本文档** - 技术规则、架构和约定
-3. **[PROGRESS.md](PROGRESS.md)** - ⭐ 项目开发进度跟踪（多工具协作必读）
-4. **[ACTION_GUIDE.md](ACTION_GUIDE.md)** - 当前开发任务和下一步计划
-5. **[.claude/PRD.md](.claude/PRD.md)** - 产品需求（如已创建）
+1. **本文档** — 技术规则、架构和防坑准则
+2. **[PROGRESS.md](PROGRESS.md)** — ⭐ 项目进度（多工具协作必读）
+3. **[WORKFLOW_GUIDE.md](WORKFLOW_GUIDE.md)** — 工作流命令参考
 
 ### 标准开发流程
 
 ```
-用户：/prime                    # 加载项目上下文
-     ↓
-用户：/plan-feature "功能描述"  # 创建实施计划
-     ↓
-用户：/execute 计划文件          # 执行实施
-     ↓
-用户：/validate                # 验证质量
-     ↓
-用户：/commit "提交信息"        # 标准化提交
+/prime              → 加载项目上下文
+/plan-feature       → 创建实施计划
+/execute 计划文件   → 执行实施
+/validate           → 验证质量
+/commit             → 标准化提交
 ```
 
 ---
 
-## 工作流命令参考
+## ⚠️ Simpod 开发防坑准则（必读）
 
-### 基础命令
+这些准则来自实际踩过的坑，违反它们将导致难以排查的 Bug。
 
-| 命令 | 用途 | 何时使用 |
-|------|------|----------|
-| `/prime` | 加载项目上下文 | 新对话、恢复工作 |
-| `/create-prd` | 创建产品需求文档 | 项目初期、功能规划 |
-| `/plan-feature` | 创建实施计划 | 开发新功能、重构 |
-| `/execute` | 执行计划 | 规划完成后 |
-| `/validate` | 验证代码 | 提交前、开发完成 |
-| `/commit` | 标准化提交 | 任何需要提交的更改 |
+### 准则 1：先打日志，再修复（Strict Rule）
 
-### 命令位置
+**在进行任何 Debug 任务前，必须先在相关逻辑节点添加 `console.log` 以确认真实数据流。禁止在没有数据证据的情况下进行「推测性修复」。**
 
-所有命令位于 `.claude/commands/` 目录：
-- `create-prd.md` - PRD 生成
-- `core_piv_loop/` - 核心 PIV 循环（prime、plan、execute）
-- `validation/` - 验证命令
-- `commit.md` - Git 提交
+这条规则直接来自 RSS 解析 Bug 的教训：我们花了 3 小时猜测原因，最后发现是 UI 层的双重代理问题。如果一开始就打日志，5 分钟就能定位。
+
+```typescript
+// ✅ 正确：先确认数据，再决定修复方向
+console.log('[RSSParser] Raw response:', { status, contentType, bodyPreview: text.slice(0, 100) })
+console.log('[Player] Audio element state:', { src: audio.src, readyState, networkState })
+console.log('[Supabase] Moving transcript_words to metadata for schema compatibility')
+
+// ❌ 错误：看到症状就猜原因然后直接修改
+// 这导致了 MARK 失败的 3 小时调试
+```
+
+**关键日志节点**：
+- API 请求发出前（URL、参数）
+- API 响应收到后（状态码、数据预览）
+- 状态更新前（旧值 → 新值）
+- 组件 mount/unmount 时（关键 ref 是否存在）
+- 数据转换时（原始数据 → 转换后数据）
 
 ---
 
-## 进度跟踪（多工具协作）
+### 准则 2：UI 代码不碰业务逻辑
 
-### PROGRESS.md 文件
+v0.dev 生成的 UI 组件**只能做展示和事件转发**，所有业务逻辑必须在 hooks/services/utils 层。
 
-**用途**：项目开发进度跟踪和多 AI 工具协作的同步文档。
+```typescript
+// ✅ 正确：组件只负责展示和事件转发
+function EpisodeItem({ episode }: Props) {
+  return <button onClick={() => onPlay(episode.audioUrl)}>Play</button>
+}
 
-#### 为什么需要 PROGRESS.md？
-
-当你使用多个 AI 工具时（Claude Code、Antigravity、Roo Code），每个工具可能在不同的会话中工作，无法共享上下文。PROGRESS.md 作为"进度事实来源"，确保：
-
-- ✅ 不同工具之间共享最新的项目状态
-- ✅ 避免重复已完成的工作
-- ✅ 保持任务优先级清晰
-- ✅ 记录技术决策和问题
-
-#### 何时更新 PROGRESS.md？
-
-**必须在以下情况更新**：
-
-1. **完成任何功能或任务后**
-2. **开始新任务前**（先读取当前状态）
-3. **遇到阻塞问题时**（记录到"已知问题"）
-4. **做出技术决策时**（记录到"技术决策记录"）
-5. **更改分支或阶段时**
-
-#### 如何使用 PROGRESS.md？
-
-**读取（任务开始前）**：
-```markdown
-在任何任务开始前，先阅读 PROGRESS.md 了解：
-- 当前项目阶段
-- 已完成的工作
-- 待办事项优先级
-- 已知问题
+// ❌ 错误：组件内部处理 URL 代理、格式转换等业务逻辑
+function EpisodeItem({ episode }: Props) {
+  const proxied = `/api/audio-proxy?url=${encodeURIComponent(episode.audioUrl)}`
+  // 这里的 URL 转换属于业务逻辑，不属于 UI
+  return <button onClick={() => onPlay(proxied)}>Play</button>
+}
 ```
 
-**更新（任务完成后）**：
-```markdown
-# 更新模板示例
+**为什么重要**：当 UI 层处理业务逻辑时，数据会在不该转换的地方被转换，导致下游组件收到错误的数据格式。这正是导致双重代理问题的根本原因。
 
-### 2026-03-07: 初始化 Next.js 项目
-**状态**: ✅ 已完成
-**更新者**: Claude Code
-**描述**: 使用 npx create-next-app 创建项目基础结构
+---
+
+### 准则 3：`<audio>` / `<video>` 元素不能有条件渲染
+
+HTML 媒体元素的 `ref` 和事件监听器必须在组件生命周期内**始终存在**，不能被 `isMounted`、条件判断或 early return 影响。
+
+```typescript
+// ✅ 正确：audio 元素始终在 DOM 中
+return (
+  <div>
+    <audio ref={audioRef} src={proxiedUrl} />
+    {!isLoaded && <LoadingSpinner />}
+  </div>
+)
+
+// ❌ 错误：isMounted 导致 audio 渲染时机晚于事件绑定
+if (!isMounted) return <LoadingSpinner />  // 此时 audioRef.current = null
+return <audio ref={audioRef} src={url} />  // 事件监听器已错过绑定时机
 ```
 
-#### PROGRESS.md 内容结构
+**为什么重要**：这导致了"音频永远加载中"的死锁。`useEffect` 在 `isMounted=false` 时执行，`audioRef.current` 是 null，事件监听器无法绑定。当 `isMounted` 变 true 后，`<audio>` 渲染了，但 `useEffect` 不会重新运行。
 
-| 章节 | 内容 |
+---
+
+### 准则 4：代理 URL 只包装一次
+
+音频/RSS URL 通过代理访问时，**只在最终消费者处包装一次**，中间层不得重复包装。
+
+```typescript
+// ✅ 正确：只在播放器的 <audio src> 处包装
+<audio src={`/api/audio-proxy?url=${encodeURIComponent(rawAudioUrl)}`} />
+
+// ❌ 错误：EpisodeList 包装一次，再通过 URL params 传给播放器后又包装一次
+const proxied = `/api/audio-proxy?url=${encodeURIComponent(episode.audioUrl)}`
+const playUrl = `/workspace/${id}?audioUrl=${encodeURIComponent(proxied)}`  // 双重包装！
+// 播放器再包装一次 → /api/audio-proxy?url=%2Fapi%2Faudio-proxy%3Furl%3D...
+// 代理收到的是 localhost 地址 → SSRF 防护拦截 → 永久失败
+```
+
+**为什么重要**：双重包装导致代理收到 `localhost` 地址，被 SSRF 防护拦截，用户看到"永远加载中"。
+
+---
+
+### 准则 5：删除前验证没有被引用
+
+删除任何文件（特别是 `src/lib/` 下的工具文件）前，必须先搜索引用：
+
+```bash
+# 删除前必须运行
+rg "import.*audio-context-pool" src/
+npx tsc --noEmit  # 删除后验证编译通过
+```
+
+过度工程化（over-engineering）的文件（如 `cache-manager.ts`、`request-optimizer.ts`、`performance-monitor.ts`）如未被实际使用，直接删除，不要保留「以备将来用」。
+
+**为什么重要**：我们删除了 `audio-context-pool.ts`，但 `audio.ts` 还在引用它，导致编译失败。这浪费了 30 分钟的调试时间。
+
+---
+
+## 项目概述
+
+### 产品愿景
+
+Simpod 是一个播客学习平台，核心用户流程：
+
+> **盲听插锚 → AI 智能热区 → 批量复盘**
+
+### 核心概念
+
+| 术语 | 定义 |
 |------|------|
-| 当前状态 | 项目阶段、当前分支、更新信息 |
-| 已完成的工作 | 已完成的功能和任务清单 |
-| 进行中的任务 | 当前正在开发的功能 |
-| 待办事项 | 按优先级排序的任务列表 |
-| 技术栈确认 | 技术选择和版本 |
-| 已知问题 | 当前存在的问题和解决状态 |
-| 技术决策记录 | 重要的技术决策和理由 |
-
-#### AI 工具协作规则
-
-**对于任何 AI 工具**：
-
-1. **任务开始前**：
-   ```
-   → 阅读 PROGRESS.md 获取最新状态
-   → 确认要处理的任务在待办事项中
-   ```
-
-2. **任务完成后**：
-   ```
-   → 将任务从"待办事项"移动到"已完成的工作"
-   → 更新"最后更新"和"更新者"
-   → 添加简要的任务描述
-   ```
-
-3. **遇到问题时**：
-   ```
-   → 在"已知问题"部分记录
-   → 描述问题、原因和可能的解决方案
-   ```
-
-4. **做出决策时**：
-   ```
-   → 在"技术决策记录"部分添加
-   → 说明决策、理由和影响
-   ```
-
-#### 关键原则
-
-1. **保持同步**：每次完成任务后立即更新
-2. **保持简洁**：用简单标记（✅、🔥、⚡）表示状态
-3. **保持准确**：不要重复记录已完成的工作
-4. **保持协作**：所有工具都应该遵守更新规则
+| **Anchor** | 用户在播放时标记的时间戳 |
+| **Hotzone** | 基于 Anchor 生成的音频片段（±10s），包含转录文本 |
+| **Transcript** | 共享缓存的转录数据，避免重复调用 API |
+| **audio_id** | 播客剧集的唯一标识符 |
 
 ---
 
-## Section 1: Project Overview
-
-### Product Vision
-
-Simpod is a podcast learning platform focused on **English extensive listening and podcast study**. The core user flow is:
-
-> **"盲听插锚 → AI智能热区 → 批量复盘"**
->
-> Blind listening anchor placement → AI smart hotzones → Batch review
-
-### Core Value Proposition
-
-- **Minimal interruption**: Users can place anchors during continuous listening without pausing
-- **AI-powered**: Automatically transcribes and contextualizes highlighted segments
-- **Batch processing**: Review all highlights in a focused session
-- **Cost-optimized**: Shared transcript caching reduces API costs
-
-### Target Users
-
-- **Efficient learners**: People who want to extract value from podcasts efficiently
-- **Podcast content learners**: Users studying content through podcasts
-- **Advanced language users**: High-level English learners seeking targeted practice
-
-### Key Concepts
-
-| Term | Definition |
-|------|------------|
-| **Anchor** | A timestamp marker placed by user or automatically detected |
-| **Hotzone** | A time-based audio segment (±10s around anchor) with transcribed content |
-| **Transcript** | Shared cached transcription data to avoid redundant API calls |
-| **audio_id** | Unique identifier for a podcast episode or audio file |
-
----
-
-## Section 2: Development Guidelines
-
-### 2.1 Code Organization
+## 架构总览
 
 ```
 src/
-├── lib/              # Core library functions
-│   ├── supabase.ts   # Database client setup
-│   └── groq.ts       # Groq API integration
-├── services/          # Business logic services
-│   ├── groq.ts       # Groq transcription
-│   ├── supabase.ts   # Database operations
-│   └── hotzone.ts    # Hotzone processing
-├── utils/             # Utility functions
-│   └── audio.ts      # Audio slicing with Web Audio API
-├── components/        # UI components (legacy - to be replaced)
-└── types.ts           # TypeScript type definitions
-```
-
-### 2.2 TypeScript Type Conventions
-
-- Use explicit types for all function parameters and return values
-- Define types in `src/types.ts` or inline for single-use cases
-- Use discriminated unions for state management
-- Keep type definitions close to their usage
-
-### 2.3 Database Interaction Patterns
-
-**Supabase Client Setup:**
-```typescript
-// src/lib/supabase.ts
-import { createClient } from '@supabase/supabase-js';
-
-export const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
-```
-
-**Common Patterns:**
-
-1. **Insert:**
-```typescript
-const { data, error } = await supabase
-  .from('hotzones')
-  .insert(hotzone)
-  .select()
-  .single();
-```
-
-2. **Upsert (Insert or Update):**
-```typescript
-const { data, error } = await supabase
-  .from('hotzones')
-  .upsert(payload, { onConflict: 'id' })
-  .select()
-  .single();
-```
-
-3. **Query with Filter:**
-```typescript
-const { data, error } = await supabase
-  .from('hotzones')
-  .select('*')
-  .eq('audio_id', audioId)
-  .order('start_time', { ascending: true });
-```
-
-4. **Error Handling:**
-```typescript
-if (error) {
-  console.error('Error saving hotzone:', error);
-  throw error;
-}
-return data;
-```
-
-### 2.4 Schema Compatibility Notes
-
-**Important:** The `transcript_words` field was moved from top-level to `metadata.transcript_words`.
-
-**When Saving:**
-```typescript
-// Move transcript_words to metadata before saving
-if (payload.transcript_words) {
-  payload.metadata = { ...payload.metadata, transcript_words: payload.transcript_words };
-  delete payload.transcript_words;
-}
-```
-
-**When Fetching:**
-```typescript
-// Pull transcript_words from metadata for UI
-return data.map(hz => {
-  if (hz.metadata?.transcript_words) {
-    return { ...hz, transcript_words: hz.metadata.transcript_words };
-  }
-  return hz;
-});
-```
-
-### 2.5 API Proxy Patterns
-
-When implementing API proxies in v2, follow these patterns:
-
-**CORS Headers:**
-```typescript
-res.setHeader('Access-Control-Allow-Origin', '*');
-res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-if (req.method === 'OPTIONS') return res.status(200).end();
-```
-
-**Streaming Responses:**
-```typescript
-upstreamResponse.pipe(res);
-req.pipe(upstreamRequest);
-```
-
-**Error Handling:**
-```typescript
-try {
-  // API logic
-} catch (error: any) {
-  console.error('Error:', error);
-  res.status(500).json({ error: error.message || 'Internal Server Error' });
-}
+├── app/                    # Next.js App Router 页面和 API 路由
+│   ├── api/
+│   │   ├── audio-proxy/    # 音频代理（解决 CORS，支持 Range 请求）
+│   │   ├── rss-proxy/      # RSS 代理（缓存 5 分钟，带重试）
+│   │   ├── itunes-proxy/   # iTunes 搜索代理
+│   │   ├── groq-proxy/     # Groq 转录 API 代理
+│   │   └── hotzones/       # Hotzone CRUD
+│   ├── podcast/[id]/       # 播客详情页（剧集列表）
+│   ├── workspace/[id]/     # 播放器工作区
+│   └── page.tsx            # 首页（搜索）
+├── components/
+│   ├── player/             # PodcastPlayerPage, PlaybackControls, MarkButton
+│   ├── podcast/            # EpisodeList
+│   ├── hotzones/           # HotzoneSidebar
+│   ├── waveform/           # HotzoneWaveform
+│   └── transcript/         # TranscriptStream
+├── services/               # 业务逻辑层
+│   ├── supabase.ts         # DB CRUD（hotzones, transcripts）
+│   ├── groq.ts             # 转录 API
+│   ├── hotzone.ts          # Hotzone 生成和处理管道
+│   └── podcast-manager.ts  # RSS 解析和缓存
+├── lib/
+│   ├── rss-parser-v2.ts    # RSS 解析器（fast-xml-parser）
+│   ├── audio-validator.ts  # 音频 URL 验证
+│   ├── podcast-search.ts   # iTunes 搜索
+│   ├── mock-data.ts        # 开发用 mock 数据
+│   └── time.ts             # 时间格式化工具
+├── stores/
+│   ├── playerStore.ts      # 播放器状态（Zustand）
+│   └── podcastStore.ts     # 播客列表状态（Zustand）
+├── types/
+│   └── simpod.ts           # 核心类型定义
+└── utils/
+    └── audio.ts            # 音频切片工具（Web Audio API）
 ```
 
 ---
 
-## Section 3: Key Functions Reference
+## 数据流（关键路径）
 
-### 3.1 Groq Service (`src/services/groq.ts`)
+### 播放流程
 
-#### `transcribeAudio(audioBlob: Blob): Promise<TranscriptionResult>`
-
-Transcribes an audio segment using Groq's Whisper API.
-
-**Parameters:**
-- `audioBlob`: WAV audio blob to transcribe
-
-**Returns:**
-```typescript
-{
-  text: string;
-  words: Array<{ word: string; start: number; end: number }>;
-}
+```
+搜索播客 (iTunes API)
+  → 选择播客 → RSS 解析 (rss-proxy + rss-parser-v2)
+  → 选择剧集 → 传递原始 audioUrl
+  → workspace/[id]?audioUrl=...
+  → PodcastPlayerPage
+  → <audio src="/api/audio-proxy?url=编码后的audioUrl">
+  → HTML5 Audio 事件 → Zustand store 更新 → UI 响应
 ```
 
-**Usage:**
-```typescript
-import { transcribeAudio } from '@/services/groq';
+### MARK 转录流程
 
-const result = await transcribeAudio(audioSlice);
-console.log(result.text); // Transcribed text
-console.log(result.words); // Word-level timestamps
 ```
-
-**Notes:**
-- Uses `whisper-large-v3` model
-- Requests word-level timestamps
-- Communicates via proxy endpoint (`/api/groq-proxy`)
-
----
-
-### 3.2 Supabase Operations (`src/services/supabase.ts`)
-
-#### `saveHotzone(hotzone: Hotzone): Promise<Hotzone>`
-
-Saves or updates a hotzone in the database.
-
-**Parameters:**
-- `hotzone`: Hotzone object (see types)
-
-**Returns:** Saved hotzone object
-
-**Usage:**
-```typescript
-import { saveHotzone } from '@/services/supabase';
-
-const saved = await saveHotzone({
-  id: generateId(),
-  audio_id: 'episode-123',
-  start_time: 10.5,
-  end_time: 30.5,
-  transcript_snippet: 'Transcribed text...',
-  source: 'manual',
-  metadata: { confidence: 0.9 },
-  status: 'pending',
-  created_at: new Date().toISOString(),
-});
-```
-
-**Notes:**
-- Uses `upsert` (insert or update)
-- Moves `transcript_words` to metadata for schema compatibility
-
----
-
-#### `fetchHotzones(audioId: string): Promise<Hotzone[]>`
-
-Fetches all hotzones for a given audio episode.
-
-**Parameters:**
-- `audioId`: Audio episode identifier
-
-**Returns:** Array of hotzones, ordered by start_time
-
-**Usage:**
-```typescript
-import { fetchHotzones } from '@/services/supabase';
-
-const hotzones = await fetchHotzones('episode-123');
-// Returns: Array of hotzones with transcript_words at top-level
-```
-
-**Notes:**
-- Returns `transcript_words` at top-level (pulled from metadata)
-- Ordered by `start_time` ascending
-
----
-
-#### `findExistingTranscript(audioId: string, startTime: number, endTime: number): Promise<TranscriptSegment | null>`
-
-Looks for a cached transcript that matches the requested time range.
-
-**Parameters:**
-- `audioId`: Audio episode identifier
-- `startTime`: Start time of requested segment
-- `endTime`: End time of requested segment
-
-**Returns:** Matching transcript or `null`
-
-**Usage:**
-```typescript
-import { findExistingTranscript } from '@/services/supabase';
-
-const existing = await findExistingTranscript('episode-123', 10, 30);
-if (existing) {
-  // Reuse cached transcript
-  console.log(existing.text);
-}
-```
-
-**Notes:**
-- Tolerance: ±1 second
-- Returns `null` if no match found
-
----
-
-#### `saveTranscript(audioId: string, startTime: number, endTime: number, text: string, words: any): Promise<void>`
-
-Saves a transcript to the shared cache.
-
-**Parameters:**
-- `audioId`: Audio episode identifier
-- `startTime`: Start time of segment
-- `endTime`: End time of segment
-- `text`: Transcribed text
-- `words`: Word-level timestamps
-
-**Usage:**
-```typescript
-import { saveTranscript } from '@/services/supabase';
-
-await saveTranscript(
-  'episode-123',
-  10.5,
-  30.5,
-  'Transcribed text...',
-  [{ word: 'Hello', start: 0, end: 0.5 }, ...]
-);
-```
-
-**Notes:**
-- Uses `upsert` with conflict on `(audio_id, start_time, end_time)`
-- Errors are logged but not thrown (side-effect optimization)
-
----
-
-### 3.3 Audio Utilities (`src/utils/audio.ts`)
-
-#### `sliceRemoteAudio(url: string, startTime: number, endTime: number): Promise<Blob>`
-
-Slices a remote audio file by time range.
-
-**Parameters:**
-- `url`: Remote audio URL
-- `startTime`: Start time in seconds
-- `endTime`: End time in seconds
-
-**Returns:** WAV audio blob
-
-**Usage:**
-```typescript
-import { sliceRemoteAudio } from '@/utils/audio';
-
-const audioSlice = await sliceRemoteAudio(
-  'https://example.com/episode.mp3',
-  10.5,
-  30.5
-);
-```
-
-**Notes:**
-- Fetches from byte 0 to get valid WAV headers
-- Uses `/api/audio-proxy` for CORS/range requests
-- Decodes with AudioContext
-- Re-encodes as WAV
-
----
-
-#### `sliceAudio(file: File, startTime: number, endTime: number): Promise<Blob>`
-
-Slices a local audio file by time range.
-
-**Parameters:**
-- `file`: Local audio file
-- `startTime`: Start time in seconds
-- `endTime`: End time in seconds
-
-**Returns:** WAV audio blob
-
-**Usage:**
-```typescript
-import { sliceAudio } from '@/utils/audio';
-
-const fileInput = document.querySelector('input[type="file"]');
-const file = fileInput.files[0];
-const audioSlice = await sliceAudio(file, 10.5, 30.5);
+用户按 MARK → 记录当前时间戳 (Anchor)
+  → processAnchorsToHotzones()
+  → 切片音频 (sliceRemoteAudio via audio-proxy)
+  → 检查 transcript 缓存 (Supabase)
+  → 命中 → 复用缓存
+  → 未命中 → Groq Whisper API → 保存缓存
+  → 生成 Hotzone → 保存 Supabase → 更新 UI
 ```
 
 ---
 
-### 3.4 Hotzone Pipeline (`src/services/hotzone.ts`)
-
-#### `generateHotzoneFromAnchor(anchor: Anchor, transcript?: TranscriptSegment[]): Hotzone`
-
-Creates a hotzone from an anchor point.
-
-**Parameters:**
-- `anchor`: Anchor object
-- `transcript`: Optional full transcript for contextual alignment
-
-**Returns:** Hotzone object
-
-**Usage:**
-```typescript
-import { generateHotzoneFromAnchor } from '@/services/hotzone';
-
-const hotzone = generateHotzoneFromAnchor(
-  { id: 'a1', audio_id: 'ep-123', timestamp: 25, source: 'manual', created_at: '...' },
-  fullTranscript // Optional
-);
-// Creates hotzone from ~13s to ~33s (±10s, -2s reaction offset)
-```
-
-**Notes:**
-- Mechanical: ±10 seconds, -2s reaction offset
-- Contextual: Expands to sentence boundaries if transcript available
-
----
-
-#### `processAnchorsToHotzones(anchors: Anchor[], ...): Promise<Hotzone[]>`
-
-Processes multiple anchors into transcribed hotzones.
-
-**Parameters:**
-- `anchors`: Array of anchor objects
-- `transcript`: Optional full transcript
-- `audioFile`: Optional local audio file
-- `audioUrl`: Optional remote audio URL
-- `transcriptInfo`: Optional official transcript metadata
-- `existingHotzones`: Optional array of existing hotzones (for extension)
-
-**Returns:** Array of processed hotzones
-
-**Usage:**
-```typescript
-import { processAnchorsToHotzones } from '@/services/hotzone';
-
-const hotzones = await processAnchorsToHotzones(
-  anchors,
-  fullTranscript,
-  undefined,
-  'https://example.com/episode.mp3',
-  undefined,
-  existingHotzones
-);
-```
-
-**Notes:**
-- Filters anchors already covered by existing hotzones
-- Detects and extends nearby hotzones
-- Merges overlapping new hotzones
-- Uses transcript caching
-- Refines boundaries using word-level timestamps
-
----
-
-## Section 4: Environment Variables
-
-### Required Variables
-
-Create a `.env` file with the following variables:
+## 环境变量
 
 ```bash
-# Supabase Configuration
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
 
-# Groq API (for transcription)
-GROQ_API_KEY=gsk_your-groq-api-key
-# Alternative: VITE_OPENAI_API_KEY=your-key
-
-# Podcast Index API (for podcast search)
-PODCAST_INDEX_KEY=your-podcast-index-key
-PODCAST_INDEX_SECRET=your-podcast-index-secret
-```
-
-### Variable Descriptions
-
-| Variable | Purpose | Source |
-|----------|---------|--------|
-| `VITE_SUPABASE_URL` | Supabase project URL | Supabase Dashboard |
-| `VITE_SUPABASE_ANON_KEY` | Supabase anonymous key | Supabase Dashboard |
-| `GROQ_API_KEY` | Groq API key for transcription | Groq Console |
-| `VITE_OPENAI_API_KEY` | Alternative to GROQ_API_KEY | OpenAI Dashboard |
-| `PODCAST_INDEX_KEY` | Podcast Index API key | Podcast Index |
-| `PODCAST_INDEX_SECRET` | Podcast Index API secret | Podcast Index |
-
-### Getting API Keys
-
-#### Groq
-1. Go to https://console.groq.com/
-2. Create an account
-3. Generate an API key
-
-#### Podcast Index
-1. Go to https://podcastindex.org/
-2. Register for an API key
-3. Get your key and secret
-
-#### Supabase
-1. Go to https://supabase.com/
-2. Create a new project
-3. Get URL and anon key from Settings > API
-
----
-
-## Section 5: Common Patterns
-
-### 5.1 UUID Generation
-
-Simple UUID generator for client-side use:
-
-```typescript
-const generateId = () => Math.random().toString(36).substr(2, 9);
-```
-
-### 5.2 RSS Parsing
-
-Use browser's `DOMParser` (preferred over rss-parser):
-
-```typescript
-const parser = new DOMParser();
-const doc = parser.parseFromString(xmlString, 'application/xml');
-
-// Extract items
-const items = doc.querySelectorAll('item');
-items.forEach(item => {
-  const title = item.querySelector('title')?.textContent;
-  const enclosure = item.querySelector('enclosure')?.getAttribute('url');
-  // ...
-});
-```
-
-### 5.3 Word-Level Timestamp Adjustment
-
-When merging transcriptions, adjust timestamps:
-
-```typescript
-const adjustedWords = result.words.map(w => ({
-  ...w,
-  start: globalStartTime + w.start,
-  end: globalStartTime + w.end,
-}));
-```
-
-### 5.4 Hotzone Boundary Refinement
-
-Use first/last word to "magnet" boundaries to speech:
-
-```typescript
-if (words && words.length > 0) {
-  const firstWord = words[0];
-  const lastWord = words[words.length - 1];
-  const newStartTime = hotzoneStart + firstWord.start;
-  const newEndTime = hotzoneStart + lastWord.end;
-
-  return { ...hotzone, start_time: newStartTime, end_time: newEndTime };
-}
+# Groq（转录）
+GROQ_API_KEY=
 ```
 
 ---
 
-## Section 6: Data Flow Diagrams
+## 代码规范
 
-### Podcast Discovery Flow
-
-```
-User Search
-    ↓
-searchPodcasts() → Parallel Search
-    ├─→ Podcast Index API (HMAC auth)
-    └─→ iTunes API (direct + CORS proxy)
-    ↓
-Merge + Deduplicate (by feedUrl)
-    ↓
-Display Results
-```
-
-### Transcription Flow
-
-```
-User Creates Anchor
-    ↓
-Generate Hotzone (±10s, -2s offset)
-    ↓
-Check Existing Hotzones
-    ↓
-Find Neighbors → Detect Extension
-    ↓
-Slice Audio (remote/local)
-    ↓
-Check Transcript Cache
-    ├─→ Found → Reuse
-    └─→ Not Found → Call Groq API → Save to Cache
-    ↓
-Save Hotzone
-```
+- **文件名**：kebab-case (`rss-parser-v2.ts`)
+- **组件名**：PascalCase (`HotzoneSidebar.tsx`)
+- **函数名**：camelCase (`fetchHotzones`)
+- **日志前缀**：`[模块名]` 格式（`[Player]`、`[RSS]`、`[Hotzone]`）
+- **类型**：所有函数参数和返回值都要有明确类型，禁用 `any`
 
 ---
 
-## Section 7: Testing Guidelines
-
-### 7.1 Unit Testing
-
-Focus on pure functions:
-- `generateHotzoneFromAnchor()`
-- Audio slicing logic
-- Timestamp calculations
-
-### 7.2 Integration Testing
-
-Test with:
-- Real Supabase instance (use test project)
-- Mock Groq API responses
-- Sample RSS feeds
-- Sample audio files
-
-### 7.3 E2E Testing
-
-Key user flows:
-1. Search for podcast
-2. Select episode
-3. Create anchor
-4. View transcribed hotzone
-5. Extend hotzone with new anchor
-
----
-
-## Section 8: Common Issues and Solutions
-
-### Issue: Transcription Caching Not Working
-
-**Solution:** Check that unique constraint on `transcripts` table:
-```sql
-CONSTRAINT transcripts_audio_time_unique UNIQUE (audio_id, start_time, end_time)
-```
-
-### Issue: Audio Decoding Fails
-
-**Solution:** Ensure you're fetching from byte 0 to get WAV headers:
-```typescript
-const proxyUrl = `/api/audio-proxy?url=${encodeURIComponent(url)}`;
-const response = await fetch(proxyUrl, {
-  headers: { 'Range': `bytes=0-${endByte}` }
-});
-```
-
-### Issue: Podcast Index API Returns 401
-
-**Solution:** Verify HMAC SHA1 authentication:
-```typescript
-const data4Hash = apiKey + apiSecret + apiHeaderTime;
-const hash = crypto.createHash('sha1').update(data4Hash).digest('hex');
-```
-
-### Issue: Hotzone transcript_words Missing
-
-**Solution:** Remember to move `transcript_words` to `metadata` when saving:
-```typescript
-payload.metadata = { ...payload.metadata, transcript_words: payload.transcript_words };
-delete payload.transcript_words;
-```
-
----
-
-## Section 9: Performance Tips
-
-1. **Use transcript caching** - Always check `transcripts` table before calling Groq
-2. **Parallel operations** - Use `Promise.all()` for independent operations
-3. **Merge overlapping hotzones** - Reduces transcription count
-4. **Index optimization** - Ensure composite index on `(audio_id, start_time, end_time)`
-
----
-
-## Section 10: Architecture Decisions Rationale
-
-### Why Web Audio API over ffmpeg.wasm?
-
-- **Lighter weight**: No external binary dependencies
-- **Browser native**: Works in all modern browsers
-- **Sufficient for MVP**: Basic slicing and WAV encoding is enough
-
-### Why Shared Transcript Table?
-
-- **Cost optimization**: Reuse transcriptions across users
-- **Performance**: Faster to fetch from database than call API
-- **Crowdsourcing**: Users contribute to shared knowledge base
-
-### Why Audio-Centric Data Model?
-
-- **Focus on content**: The app is about podcasts, not users
-- **Simpler queries**: All data accessible via `audio_id`
-- **Future flexibility**: Easy to add user-specific views later
-
-### Why Hybrid Podcast Search?
-
-- **Coverage**: Podcast Index + iTunes = broader coverage
-- **Redundancy**: If one fails, the other works
-- **Quality**: Cross-reference results for better quality
-
----
-
-## Section 11: v2 Migration Notes
-
-When migrating to Simpod v2:
-
-### Keep (Refactor)
-- Database schema (apply migrations to new project)
-- Core business logic (`src/services/`)
-- Transcription caching pattern
-- Hotzone extension logic
-
-### Replace
-- Build tooling (Vite → Next.js or similar)
-- UI components (complete redesign)
-- API routes (reimplement patterns in new framework)
-- State management (Zustand → new approach)
-
-### Reuse Patterns
-- CORS proxy pattern
-- Bearer token authentication
-- HMAC SHA1 authentication
-- Streaming response pattern
-- Error handling pattern
-
----
-
-## Appendix: TypeScript Type Definitions
-
-```typescript
-// Anchor
-export interface Anchor {
-  id: string;
-  audio_id: string;
-  timestamp: number;
-  source: 'manual' | 'auto';
-  created_at: string;
-}
-
-// Hotzone
-export interface Hotzone {
-  id: string;
-  audio_id: string;
-  start_time: number;
-  end_time: number;
-  transcript_snippet?: string;
-  transcript_words?: Array<{ word: string; start: number; end: number }>;
-  source: 'manual' | 'auto';
-  metadata: {
-    confidence?: number;
-    difficulty_score?: number;
-    user_adjustment_history?: Array<{
-      action: string;
-      timestamp: string;
-    }>;
-    transcript_words?: Array<{ word: string; start: number; end: number }>;
-  };
-  status: 'pending' | 'reviewed' | 'archived';
-  created_at: string;
-}
-
-// Transcript
-export interface TranscriptSegment {
-  audio_id: string;
-  start_time: number;
-  end_time: number;
-  text: string;
-  words?: Array<{ word: string; start: number; end: number }>;
-}
-
-// Podcast
-export interface Podcast {
-  title: string;
-  author: string;
-  feedUrl: string;
-  artwork: string;
-  source?: 'podcastindex' | 'itunes';
-}
-
-// Episode
-export interface Episode {
-  title: string;
-  description: string;
-  pubDate: string;
-  audioUrl: string;
-  transcriptUrl?: string;
-  duration?: number;
-}
-```
-
----
-
-## Quick Reference
-
-### Function Locations
-
-| Function | File |
-|----------|------|
-| `transcribeAudio()` | `src/services/groq.ts` |
-| `saveHotzone()` | `src/services/supabase.ts` |
-| `fetchHotzones()` | `src/services/supabase.ts` |
-| `findExistingTranscript()` | `src/services/supabase.ts` |
-| `saveTranscript()` | `src/services/supabase.ts` |
-| `sliceRemoteAudio()` | `src/utils/audio.ts` |
-| `sliceAudio()` | `src/utils/audio.ts` |
-| `generateHotzoneFromAnchor()` | `src/services/hotzone.ts` |
-| `processAnchorsToHotzones()` | `src/services/hotzone.ts` |
-
-### Environment Variables
-
-```bash
-VITE_SUPABASE_URL
-VITE_SUPABASE_ANON_KEY
-GROQ_API_KEY
-PODCAST_INDEX_KEY
-PODCAST_INDEX_SECRET
-```
-
-### Database Tables
-
-- `anchors` - Timestamp markers
-- `hotzones` - Transcribed segments
-- `transcripts` - Shared cache
-
----
-
-**Last Updated:** 2026-03-07
-**Version:** 2.0 (工作流系统集成)
+**最后更新**：2026-03-15
+**版本**：3.1（5 条防坑准则完整版）
