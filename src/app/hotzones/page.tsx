@@ -23,7 +23,7 @@ import {
   RefreshCw,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { formatTime, formatDate } from "@/lib/mock-data"
+import { formatDate } from "@/lib/mock-data"; import { formatTime } from "@/lib/time"
 import type { Hotzone, HotzoneFilter } from "@/types/simpod"
 import { fetchAllHotzones, updateHotzoneStatus } from "@/services/supabase"
 

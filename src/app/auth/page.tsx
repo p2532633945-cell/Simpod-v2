@@ -32,7 +32,12 @@ export default function AuthPage() {
         setMessage("Check your email for the confirmation link!")
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
-        if (error) throw error
+        if (error) {
+          if (error.message.includes('Invalid login credentials')) {
+            throw new Error('邮箱或密码错误。如果是新账户，请检查邮箱收到的验证链接。')
+          }
+          throw error
+        }
         console.log('[Auth] Login successful, redirecting...')
         router.push("/")
         router.refresh()
@@ -112,6 +117,7 @@ export default function AuthPage() {
                   required
                   placeholder="••••••••"
                   minLength={6}
+                  maxLength={128}
                   className={cn(
                     "w-full pl-9 pr-10 py-2.5 rounded-lg bg-secondary/50 border border-border",
                     "text-sm text-foreground placeholder:text-muted-foreground",
@@ -126,6 +132,7 @@ export default function AuthPage() {
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
+              <p className="text-xs text-muted-foreground mt-1">至少 6 个字符</p>
             </div>
 
             {/* Error / Message */}

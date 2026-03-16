@@ -244,6 +244,50 @@ GROQ_API_KEY=
 
 ---
 
-**最后更新**：2026-03-15
-**版本**：3.1（5 条防坑准则完整版）
+### 准则 6：Middleware 不能干扰 API 路由（Strict Rule）
+
+**Next.js middleware 必须显式排除 `/api/*` 路由，避免在 API 处理前执行全局逻辑（如 Supabase session 刷新）导致代理超时或行为异常。**
+
+这条规则来自 Phase 3 的 middleware 覆盖问题：新 middleware 在每个请求上调用 `supabase.auth.getUser()`，导致 `/api/rss-proxy` 请求延迟和失败。
+
+```typescript
+// ✅ 正确：API 路由直接跳过
+export async function middleware(request: NextRequest) {
+  if (request.nextUrl.pathname.startsWith('/api/')) {
+    return NextResponse.next()  // 直通，不执行任何逻辑
+  }
+  
+  // 只对页面路由执行 session 刷新
+  const supabase = createServerClient(...)
+  await supabase.auth.getUser()
+  return supabaseResponse
+}
+
+// ❌ 错误：所有请求都执行 Supabase 调用
+export async function middleware(request: NextRequest) {
+  const supabase = createServerClient(...)
+  await supabase.auth.getUser()  // 这会阻塞 /api/rss-proxy
+  return NextResponse.next()
+}
+```
+
+**检查清单**：
+- [ ] 新增 middleware 时，检查 matcher 是否包含 `/api/*`
+- [ ] 如果包含，添加 `if (pathname.startsWith('/api/')) return NextResponse.next()`
+- [ ] 删除旧 middleware 文件避免冲突（Next.js 只加载根目录 `middleware.ts`）
+- [ ] 测试 API 路由响应时间是否正常（应 < 1s）
+
+**诊断命令**：
+```bash
+# 检查是否有多个 middleware 文件
+find . -name "middleware.ts" -o -name "middleware.js"
+
+# 检查 middleware 是否排除了 /api
+grep -n "pathname.startsWith('/api')" middleware.ts
+```
+
+---
+
+**最后更新**：2026-03-17
+**版本**：3.2（6 条防坑准则完整版）
 
