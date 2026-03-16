@@ -332,6 +332,10 @@ export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps)
     if (audio) {
       audio.playbackRate = rate
     }
+    // 关键修复：同时更新 store，这样 PlaybackControls 的显示会更新
+    const { setPlaybackRate } = usePlayerStore.getState()
+    setPlaybackRate(rate)
+    console.log('[Player] Playback rate changed to:', rate)
   }, [])
 
   // onMark(timestamp: number): void - 不暂停播放，调用服务层

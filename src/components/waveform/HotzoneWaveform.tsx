@@ -5,32 +5,24 @@
  * 
  * 显示音频波形并高亮标记热区位置
  * 支持点击热区跳转和进度条拖拽
- * 
- * 增强功能：
- * - 细腻动态波形
- * - 热区标记（小旗子）
- * - 锚点标记（光点）
  */
 
 import { useCallback, useRef, useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
-import type { HotzoneWaveformProps, Hotzone, Anchor } from "@/types/simpod"
+import type { HotzoneWaveformProps, Hotzone } from "@/types/simpod"
 import { formatTime } from "@/lib/time"
-import { mockAnchors } from "@/lib/mock-data"
 import { Flag } from "lucide-react"
 
-const BAR_COUNT = 120 // 更多条形使波形更细腻
+const BAR_COUNT = 120
 
 // 预生成的波形数据
 const WAVEFORM_DATA: number[] = Array.from({ length: BAR_COUNT }, (_, i) => {
-  // 使用固定种子生成伪随机数据
   const seed = (i * 7919 + 1) % 1000
   return 0.2 + (seed / 1000) * 0.6
 })
 
 interface ExtendedHotzoneWaveformProps extends HotzoneWaveformProps {
   isPlaying?: boolean
-  anchors?: Anchor[]
 }
 
 export function HotzoneWaveform({
@@ -40,21 +32,18 @@ export function HotzoneWaveform({
   onHotzoneJump,
   onSeek,
   isPlaying = false,
-  anchors = mockAnchors,
 }: ExtendedHotzoneWaveformProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [showMarkerTooltip, setShowMarkerTooltip] = useState<string | null>(null)
   const [isMounted, setIsMounted] = useState(false)
 
-  // 确保只在客户端渲染动态内容
   useEffect(() => {
     setIsMounted(true)
   }, [])
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
 
-  // 计算热区在波形上的位置
   const getHotzonePosition = useCallback(
     (hotzone: Hotzone) => {
       if (duration <= 0) return { left: 0, width: 0 }
@@ -65,16 +54,6 @@ export function HotzoneWaveform({
     [duration]
   )
 
-  // 计算锚点位置
-  const getAnchorPosition = useCallback(
-    (anchor: Anchor) => {
-      if (duration <= 0) return 0
-      return (anchor.timestamp / duration) * 100
-    },
-    [duration]
-  )
-
-  // 处理波形点击
   const handleWaveformClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       if (!containerRef.current || duration <= 0) return
@@ -89,7 +68,6 @@ export function HotzoneWaveform({
     [duration, onSeek]
   )
 
-  // 处理拖拽
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       if (!isDragging || !containerRef.current || duration <= 0) return
@@ -104,7 +82,6 @@ export function HotzoneWaveform({
     [isDragging, duration, onSeek]
   )
 
-  // 触摸事件处理（移动端）
   const handleTouchMove = useCallback(
     (e: React.TouchEvent<HTMLDivElement>) => {
       if (!containerRef.current || duration <= 0) return
@@ -119,7 +96,6 @@ export function HotzoneWaveform({
     [duration, onSeek]
   )
 
-  // 检查当前时间是否在某个热区内
   const isInHotzone = useCallback(
     (time: number): Hotzone | null => {
       return (
@@ -135,7 +111,7 @@ export function HotzoneWaveform({
 
   return (
     <div className="flex flex-col gap-2 w-full">
-      {/* Markers Row - 热区和锚点标记 */}
+      {/* Markers Row - 热区标记 */}
       <div className="relative h-5 w-full">
         {/* 热区标记 - 小旗子 */}
         {hotzones.map((hotzone) => {
@@ -174,34 +150,6 @@ export function HotzoneWaveform({
                   <span className="text-muted-foreground ml-1">Hotzone</span>
                 </div>
               )}
-            </button>
-          )
-        })}
-
-        {/* 锚点标记 - 小圆点 */}
-        {anchors.map((anchor) => {
-          const left = getAnchorPosition(anchor)
-          const isNearPlayhead = Math.abs(currentTime - anchor.timestamp) < 2
-
-          return (
-            <button
-              key={`anchor-${anchor.id}`}
-              className={cn(
-                "absolute bottom-0 -translate-x-1/2 transition-all duration-200",
-                "hover:scale-125 z-10"
-              )}
-              style={{ left: `${left}%` }}
-              onClick={() => onSeek(anchor.timestamp)}
-              aria-label={`跳转到锚点 ${formatTime(anchor.timestamp)}`}
-            >
-              <div
-                className={cn(
-                  "w-1.5 h-1.5 rounded-full transition-all",
-                  isNearPlayhead
-                    ? "bg-simpod-primary shadow-lg"
-                    : "bg-simpod-primary/50 hover:bg-simpod-primary"
-                )}
-              />
             </button>
           )
         })}
@@ -257,13 +205,12 @@ export function HotzoneWaveform({
           )
         })}
 
-        {/* Waveform Lines - 更细的线条 */}
+        {/* Waveform Lines */}
         <div className="absolute inset-0 flex items-center justify-between px-0.5">
           {WAVEFORM_DATA.map((height, i) => {
             const barPosition = (i / BAR_COUNT) * 100
             const isBeforePlayhead = barPosition <= progress
 
-            // 检查这个 bar 是否在热区内
             const barTime = (barPosition / 100) * duration
             const inHotzone = isInHotzone(barTime)
 
@@ -324,10 +271,6 @@ export function HotzoneWaveform({
           <div className="flex items-center gap-1">
             <Flag size={10} className="text-simpod-mark" />
             <span className="text-simpod-muted">Hotzone</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-1.5 h-1.5 rounded-full bg-simpod-primary" />
-            <span className="text-simpod-muted">Anchor</span>
           </div>
         </div>
 

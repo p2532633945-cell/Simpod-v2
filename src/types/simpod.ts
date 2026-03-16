@@ -45,6 +45,7 @@ export interface HotzoneMetadata {
     action: string
     timestamp: string
   }>
+  transcript_words?: Word[]
 }
 
 /** 热区 - 基于锚点生成的音频片段 */
