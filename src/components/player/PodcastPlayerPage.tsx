@@ -28,9 +28,6 @@ import type { Word, Anchor } from "@/types/simpod"
 import { processAnchorsToHotzones } from "@/services/hotzone"
 import { saveHotzone, fetchHotzones } from "@/services/supabase"
 
-// Mock 数据
-import { mockWords } from "@/lib/mock-data"
-
 interface PodcastPlayerPageProps {
   audioId: string
   audioUrl?: string
@@ -297,8 +294,9 @@ export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps)
     if (selectedHotzone?.transcript_words) {
       return selectedHotzone.transcript_words
     }
-    // 默认返回 mock words
-    return mockWords
+    // 不再返回 mockWords，改为空数组
+    // TranscriptStream 会显示提示信息
+    return []
   }, [hotzones, selectedHotzoneId])
 
   // ============================================
@@ -604,3 +602,6 @@ export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps)
     </div>
   )
 }
+
+
+
