@@ -17,7 +17,7 @@ export const saveHotzone = async (hotzone: Hotzone) => {
   const supabase = createClient();
 
   // Create a copy to avoid mutating original object used in UI
-  const payload: Record<string, unknown> = { ...hotzone };
+  const payload = { ...hotzone } as Hotzone & { user_id?: string };
 
   // P1-4: 关联当前登录用户
   const { data: { user } } = await supabase.auth.getUser();
@@ -28,20 +28,21 @@ export const saveHotzone = async (hotzone: Hotzone) => {
 
   // 关键修复：将 transcript_words 从顶层移到 metadata 中
   // 数据库 schema 中 transcript_words 不是顶层列，而是在 metadata JSONB 中
-  if (payload.transcript_words) {
+  const dbPayload: Record<string, unknown> = { ...payload };
+  if (dbPayload.transcript_words) {
     console.log('[Supabase] Moving transcript_words to metadata for schema compatibility');
-    payload.metadata = {
-      ...payload.metadata,
+    dbPayload.metadata = {
+      ...(payload.metadata as object),
       transcript_words: payload.transcript_words
     };
-    delete (payload as any).transcript_words;
+    delete dbPayload.transcript_words;
   }
 
   try {
-    console.log('[Supabase] Saving hotzone:', { id: payload.id, audioId: payload.audio_id });
+    console.log('[Supabase] Saving hotzone:', { id: dbPayload.id, audioId: dbPayload.audio_id });
     const { data, error } = await supabase
       .from('hotzones')
-      .upsert(payload, { onConflict: 'id' })
+      .upsert(dbPayload, { onConflict: 'id' })
       .select()
       .single();
 
