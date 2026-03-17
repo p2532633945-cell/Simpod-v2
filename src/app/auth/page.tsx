@@ -3,13 +3,13 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Loader2, Mail, Lock, Eye, EyeOff, Flame } from "lucide-react"
+import { Loader2, Mail, Lock, Eye, EyeOff, Flame, ArrowLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 
 export default function AuthPage() {
   const router = useRouter()
-  const [mode, setMode] = useState<"login" | "signup">("login")
+  const [mode, setMode] = useState<"login" | "signup" | "reset">("login")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -30,6 +30,14 @@ export default function AuthPage() {
         const { error } = await supabase.auth.signUp({ email, password })
         if (error) throw error
         setMessage("Check your email for the confirmation link!")
+      } else if (mode === "reset") {
+        // P5-1: 密码重置功能
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/auth?mode=update-password`,
+        })
+        if (error) throw error
+        setMessage("Check your email for the password reset link!")
+        setMode("login")
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) {
@@ -63,26 +71,43 @@ export default function AuthPage() {
         {/* Card */}
         <div className="bg-card border border-border rounded-2xl p-6">
           {/* Toggle */}
-          <div className="flex mb-6 bg-secondary rounded-lg p-1">
-            <button
-              onClick={() => { setMode("login"); setError(null); setMessage(null) }}
-              className={cn(
-                "flex-1 py-2 rounded-md text-sm font-medium transition-all",
-                mode === "login" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Sign In
-            </button>
-            <button
-              onClick={() => { setMode("signup"); setError(null); setMessage(null) }}
-              className={cn(
-                "flex-1 py-2 rounded-md text-sm font-medium transition-all",
-                mode === "signup" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Sign Up
-            </button>
-          </div>
+          {mode !== "reset" && (
+            <div className="flex mb-6 bg-secondary rounded-lg p-1">
+              <button
+                onClick={() => { setMode("login"); setError(null); setMessage(null) }}
+                className={cn(
+                  "flex-1 py-2 rounded-md text-sm font-medium transition-all",
+                  mode === "login" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Sign In
+              </button>
+              <button
+                onClick={() => { setMode("signup"); setError(null); setMessage(null) }}
+                className={cn(
+                  "flex-1 py-2 rounded-md text-sm font-medium transition-all",
+                  mode === "signup" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Sign Up
+              </button>
+            </div>
+          )}
+
+          {/* Reset Mode Header */}
+          {mode === "reset" && (
+            <div className="mb-6">
+              <button
+                onClick={() => { setMode("login"); setError(null); setMessage(null) }}
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-3"
+              >
+                <ArrowLeft size={16} />
+                Back to Sign In
+              </button>
+              <h2 className="text-lg font-semibold text-foreground">Reset Password</h2>
+              <p className="text-xs text-muted-foreground mt-1">Enter your email to receive a password reset link</p>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email */}
@@ -105,35 +130,37 @@ export default function AuthPage() {
               </div>
             </div>
 
-            {/* Password */}
-            <div>
-              <label className="text-xs text-muted-foreground mb-1.5 block">Password</label>
-              <div className="relative">
-                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  placeholder="••••••••"
-                  minLength={6}
-                  maxLength={128}
-                  className={cn(
-                    "w-full pl-9 pr-10 py-2.5 rounded-lg bg-secondary/50 border border-border",
-                    "text-sm text-foreground placeholder:text-muted-foreground",
-                    "focus:outline-none focus:border-simpod-mark/50"
-                  )}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+            {/* Password - only show for login/signup */}
+            {mode !== "reset" && (
+              <div>
+                <label className="text-xs text-muted-foreground mb-1.5 block">Password</label>
+                <div className="relative">
+                  <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    placeholder="••••••••"
+                    minLength={6}
+                    maxLength={128}
+                    className={cn(
+                      "w-full pl-9 pr-10 py-2.5 rounded-lg bg-secondary/50 border border-border",
+                      "text-sm text-foreground placeholder:text-muted-foreground",
+                      "focus:outline-none focus:border-simpod-mark/50"
+                    )}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">至少 6 个字符</p>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">至少 6 个字符</p>
-            </div>
+            )}
 
             {/* Error / Message */}
             {error && (
@@ -156,13 +183,23 @@ export default function AuthPage() {
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <Loader2 size={16} className="animate-spin" />
-                  {mode === "login" ? "Signing in..." : "Creating account..."}
+                  {mode === "login" ? "Signing in..." : mode === "signup" ? "Creating account..." : "Sending reset link..."}
                 </span>
               ) : (
-                mode === "login" ? "Sign In" : "Create Account"
+                mode === "login" ? "Sign In" : mode === "signup" ? "Create Account" : "Send Reset Link"
               )}
             </button>
           </form>
+
+          {/* Forgot Password Link - only show for login */}
+          {mode === "login" && (
+            <button
+              onClick={() => { setMode("reset"); setError(null); setMessage(null) }}
+              className="w-full mt-3 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Forgot password?
+            </button>
+          )}
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-4">

@@ -61,7 +61,8 @@ export default function PodcastPage() {
     }
 
     loadPodcast()
-  }, [feedUrl, title, author, artwork, description])
+    // P4-5 性能优化：只依赖 feedUrl，避免重复请求
+  }, [feedUrl])
 
   if (!feedUrl) {
     return (

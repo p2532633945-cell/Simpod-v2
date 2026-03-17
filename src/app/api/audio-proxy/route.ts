@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-const REQUEST_TIMEOUT = 30000 // 30 秒
+const REQUEST_TIMEOUT = 60000 // 60 秒（P4-5 性能优化：增加超时时间应对慢速服务器）
 const MAX_RETRIES = 2
 
 async function fetchWithRetry(
@@ -142,6 +142,11 @@ export async function GET(req: NextRequest) {
       'Access-Control-Expose-Headers',
       'Content-Range, Content-Length, Accept-Ranges'
     )
+
+    // P4-5 性能优化：添加缓存策略
+    // 音频文件通常不变，可以缓存 7 天
+    responseHeaders.set('Cache-Control', 'public, max-age=604800, immutable')
+    responseHeaders.set('X-Content-Type-Options', 'nosniff')
 
     // 转发关键响应头
     const forwardHeaders = [

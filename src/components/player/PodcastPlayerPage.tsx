@@ -42,7 +42,6 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay }: Po
   const [isMarking, setIsMarking] = useState(false)
   const [audioLoading, setAudioLoading] = useState(true)
   const [audioError, setAudioError] = useState<string | null>(null)
-  const [hasAutoPlayed, setHasAutoPlayed] = useState(false)
 
   // ============================================
   // Zustand Store 状态管理
@@ -68,6 +67,9 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay }: Po
 
   // 本地状态：选中热区（UI 状态不需要放入 store）
   const [selectedHotzoneId, setSelectedHotzoneId] = useState<string | undefined>()
+  
+  // P4-5 性能优化：使用 useRef 防止自动跳转重复执行（避免闭包问题）
+  const autoPlayExecutedRef = useRef(false)
 
   // 设置 audioRef 到 store
   useEffect(() => {
@@ -141,6 +143,23 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay }: Po
       clearTimeout(loadingTimeout)
       setAudioLoading(false)
       setAudioError(null)
+      
+      // P4-5 性能优化：自动跳转和播放（只执行一次）
+      // 使用 ref 而不是 state 避免闭包问题
+      if (!autoPlayExecutedRef.current && startTime !== undefined && startTime >= 0 && startTime <= audio.duration) {
+        audio.currentTime = startTime
+        console.log('[Player] Auto-seeking to:', startTime)
+        
+        if (autoPlay) {
+          audio.play().catch((err) => {
+            console.error('[Player] Auto-play failed:', err)
+          })
+          console.log('[Player] Auto-playing from hotzone')
+        }
+        
+        // 标记已执行，防止重复
+        autoPlayExecutedRef.current = true
+      }
     }
 
     const handleCanPlayThrough = () => {
@@ -261,6 +280,9 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay }: Po
       try {
         console.log("[Player] DIAG: audioId changed to:", audioId)
         
+        // 重置自动播放标志位
+        autoPlayExecutedRef.current = false
+        
         // 重置播放器状态和热区
         const { setHotzones: setHotzonesDirect, setCurrentTime: setCurrentTimeDirect, setIsPlaying: setIsPlayingDirect } = usePlayerStore.getState()
         setHotzonesDirect([])
@@ -321,24 +343,6 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay }: Po
       }
     }
   }, [audioId, addHotzone])
-
-  // Phase 5 优化：自动跳转到指定时间并播放（从复盘页面跳转时）
-  useEffect(() => {
-    if (startTime !== undefined && audioRef.current && !hasAutoPlayed && audioRef.current.readyState >= 2) {
-      console.log('[Player] Phase 5: Auto-jumping to startTime:', startTime)
-      audioRef.current.currentTime = startTime
-      
-      if (autoPlay) {
-        console.log('[Player] Phase 5: Auto-playing from startTime')
-        audioRef.current.play().catch((err) => {
-          console.error('[Player] Failed to auto-play:', err)
-        })
-        setIsPlaying(true)
-      }
-      
-      setHasAutoPlayed(true)
-    }
-  }, [startTime, autoPlay, hasAutoPlayed, setIsPlaying])
 
   // 获取当前热区的转录词
   const currentTranscriptWords: Word[] = useMemo(() => {
@@ -497,6 +501,7 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay }: Po
         ref={audioRef}
         src={`/api/audio-proxy?url=${encodeURIComponent(audioUrl)}`}
         preload="auto"
+        crossOrigin="anonymous"
         className="hidden"
       />
 

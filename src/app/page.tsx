@@ -24,6 +24,7 @@ import {
 import { cn } from "@/lib/utils"
 import { mockProjects, formatDate } from "@/lib/mock-data"
 import { searchPodcasts } from "@/lib/podcast-search"
+import { searchCache } from "@/lib/search-cache"
 import type { Project, Podcast as PodcastType } from "@/types/simpod"
 import { useAuthStore } from "@/stores/authStore"
 
@@ -52,8 +53,21 @@ export default function HomePage() {
 
     try {
       console.log("[Home] Searching for:", searchQuery)
+      
+      // P4-5 性能优化：检查缓存
+      const cachedResults = searchCache.get<PodcastType[]>(searchQuery, 'podcast')
+      if (cachedResults) {
+        console.log("[Home] Using cached search results:", cachedResults.length, "podcasts")
+        setSearchResults(cachedResults)
+        setIsSearching(false)
+        return
+      }
+      
       const results = await searchPodcasts(searchQuery)
       console.log("[Home] Search results:", results.length, "podcasts")
+
+      // 缓存结果
+      searchCache.set(searchQuery, 'podcast', results)
 
       if (results.length === 0) {
         setSearchError("No podcasts found. Try different keywords (e.g., 'bbc', 'technology', 'news').")
@@ -124,6 +138,14 @@ export default function HomePage() {
                 <span className="text-xs text-muted-foreground hidden md:block max-w-[120px] truncate" title={user.email}>
                   <User size={12} className="inline mr-1" />{user.email}
                 </span>
+                <Link
+                  href="/profile"
+                  className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                  aria-label="个人资料"
+                  title="Profile"
+                >
+                  <User size={18} />
+                </Link>
                 <button
                   onClick={signOut}
                   className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"

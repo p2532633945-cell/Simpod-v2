@@ -288,6 +288,64 @@ grep -n "pathname.startsWith('/api')" middleware.ts
 
 ---
 
+### 准则 7：模块化设计 - 独立开发与集成（Strict Rule）
+
+**为了支持并行开发和降低集成风险，所有新功能必须遵循模块化设计原则。各模块之间通过明确的接口通信，不直接依赖内部实现。**
+
+这条规则确保：
+1. 不同开发者可以独立开发不同模块
+2. 模块更新不会影响其他模块
+3. 易于测试和调试
+4. 易于后期替换或升级
+
+**模块划分**：
+```
+src/
+├── services/          # 业务逻辑层（独立模块）
+│   ├── hotzone.ts     # 热区处理模块
+│   ├── transcription.ts # 转录模块
+│   ├── playback.ts    # 播放控制模块
+│   └── analytics.ts   # 统计分析模块
+├── components/        # UI 组件层（展示层）
+│   ├── player/        # 播放器模块
+│   ├── hotzones/      # 热区管理模块
+│   ├── transcript/    # 转录显示模块
+│   └── analytics/     # 统计显示模块
+├── stores/            # 状态管理（接口层）
+│   ├── playerStore.ts
+│   ├── hotzoneStore.ts
+│   └── analyticsStore.ts
+└── lib/               # 工具库（可复用）
+    ├── audio.ts       # 音频处理
+    ├── time.ts        # 时间格式化
+    └── cache.ts       # 缓存工具
+```
+
+**模块间通信规则**：
+```typescript
+// ✅ 正确：通过 store 和 service 接口通信
+// 组件只调用 service 的公开接口
+const result = await hotzoneService.createHotzone(data)
+
+// ❌ 错误：组件直接调用内部函数
+const result = await hotzoneService._internalProcessing(data)
+
+// ✅ 正确：模块通过 store 共享状态
+const { hotzones } = useHotzoneStore()
+
+// ❌ 错误：模块直接修改其他模块的状态
+hotzoneStore.hotzones = newHotzones  // 绕过 setter
+```
+
+**新功能开发检查清单**：
+- [ ] 功能是否有明确的 service 层实现？
+- [ ] 是否通过 store 暴露状态？
+- [ ] 是否有清晰的公开接口文档？
+- [ ] 是否避免了跨模块的直接依赖？
+- [ ] 是否可以独立测试？
+
+---
+
 **最后更新**：2026-03-17
-**版本**：3.2（6 条防坑准则完整版）
+**版本**：3.3（7 条防坑准则 + 模块化设计）
 

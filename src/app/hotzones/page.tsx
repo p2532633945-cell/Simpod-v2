@@ -108,14 +108,14 @@ export default function HotzonesPage() {
   const handleHotzoneJump = useCallback((hotzoneId: string, startTime: number) => {
     const hotzone = hotzones.find((hz) => hz.id === hotzoneId)
     if (hotzone) {
-      // Phase 5 优化：从 metadata 中获取 audioUrl，并传递 startTime 和 autoPlay 参数
+      // P4-5 性能优化：从 metadata 中获取 audioUrl，并自动播放
       const audioUrl = (hotzone.metadata as any)?.audioUrl
       const urlParams = new URLSearchParams()
+      urlParams.set('startTime', startTime.toString())
+      urlParams.set('autoPlay', 'true')
       if (audioUrl) {
         urlParams.set('audioUrl', audioUrl)
       }
-      urlParams.set('startTime', startTime.toString())
-      urlParams.set('autoPlay', 'true')
       window.location.href = `/workspace/${hotzone.audio_id}?${urlParams.toString()}`
       console.log('[HotzonesPage] Jumping to hotzone:', { hotzoneId, audioUrl, startTime, autoPlay: true })
     }
