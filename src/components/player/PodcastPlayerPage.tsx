@@ -636,7 +636,8 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
             />
 
             {/* Controls */}
-            <div className="mt-6 flex items-center justify-between">
+            <div className="mt-4 flex flex-col gap-3">
+              {/* Playback controls row */}
               <div className="flex-1">
                 <PlaybackControls
                   playerState={playerState}
@@ -646,7 +647,8 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
                 />
               </div>
 
-              <div className="ml-6">
+              {/* MARK button row — full width on mobile */}
+              <div className="flex items-center justify-center">
                 {isMarking ? (
                   <button
                     disabled
@@ -666,22 +668,22 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
             </div>
 
             {/* P6-3 + P6-2: 热区档位选择器 + 即时回溯开关 */}
-            <div className="mt-4 flex items-center justify-between gap-4">
+            <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
               {/* P6-3: 热区时间范围档位 */}
-              <div className="flex items-center gap-2">
-                <Gauge size={14} className="text-muted-foreground shrink-0" />
-                <span className="text-xs text-muted-foreground">Range:</span>
+              <div className="flex items-center gap-1.5">
+                <Gauge size={13} className="text-muted-foreground shrink-0" />
+                <span className="text-xs text-muted-foreground hidden sm:inline">Range:</span>
                 <div className="flex rounded-lg overflow-hidden border border-border">
                   {([
-                    { key: 'tight', label: '3s', title: 'Tight — ±3s (single word/phrase)' },
-                    { key: 'normal', label: '10s', title: 'Normal — ±10s (default)' },
-                    { key: 'wide', label: '20s', title: 'Wide — ±20s (full context)' },
+                    { key: 'tight', label: '3s', title: 'Tight — ±3s' },
+                    { key: 'normal', label: '10s', title: 'Normal — ±10s' },
+                    { key: 'wide', label: '20s', title: 'Wide — ±20s' },
                   ] as const).map(({ key, label, title }) => (
                     <button
                       key={key}
                       onClick={() => setHotzoneRange(key)}
                       title={title}
-                      className={`px-2.5 py-1 text-xs font-mono transition-colors ${
+                      className={`px-2 py-1 text-xs font-mono transition-colors ${
                         hotzoneRange === key
                           ? 'bg-simpod-mark text-simpod-dark font-semibold'
                           : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-secondary'
@@ -696,15 +698,15 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
               {/* P6-2: 即时回溯开关 */}
               <button
                 onClick={toggleInstantReplayMode}
-                title={instantReplayMode ? 'Instant Replay ON — click to disable' : 'Instant Replay OFF — click to enable'}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                title={instantReplayMode ? 'Instant Replay ON' : 'Instant Replay OFF'}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors border ${
                   instantReplayMode
                     ? 'bg-simpod-mark/15 border-simpod-mark/50 text-simpod-mark'
-                    : 'bg-transparent border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground'
+                    : 'bg-transparent border-border text-muted-foreground hover:text-foreground'
                 }`}
               >
-                <RotateCcw size={12} className={instantReplayMode ? 'animate-spin-slow' : ''} />
-                <span>Replay</span>
+                <RotateCcw size={11} className={instantReplayMode ? 'animate-spin-slow' : ''} />
+                <span className="hidden sm:inline">Replay</span>
                 {instantReplayMode && <span className="w-1.5 h-1.5 rounded-full bg-simpod-mark" />}
               </button>
             </div>

@@ -281,9 +281,9 @@ export default function HomePage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setIsSearchFocused(true)}
                 onBlur={() => setIsSearchFocused(false)}
-                placeholder="Search podcasts (e.g., 'bbc', 'technology', 'news')..."
+                placeholder="Search podcasts..."
                 className={cn(
-                  "w-full pl-12 pr-4 py-4 rounded-2xl",
+                  "w-full pl-12 pr-20 py-4 rounded-2xl",
                   "bg-card border border-border",
                   "text-foreground placeholder:text-muted-foreground",
                   "focus:outline-none focus:border-simpod-mark/50",
