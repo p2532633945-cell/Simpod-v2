@@ -7,13 +7,14 @@
  * 严格遵守技术契约的接口定义
  */
 
-import { useCallback, useRef, useState } from "react"
-import { Play, Pause, SkipBack, SkipForward } from "lucide-react"
+import { useCallback, useRef, useState, useEffect } from "react"
+import { Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { PlaybackControlsProps } from "@/types/simpod"
 import { formatTime } from "@/lib/time"
 
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2]
+const SKIP_INTERVALS = [5, 10, 30] // seconds
 
 export function PlaybackControls({
   playerState,
@@ -31,6 +32,34 @@ export function PlaybackControls({
   const { currentTime, duration, isPlaying, playbackRate } = playerState
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
+
+  // 键盘快捷键处理（P5-5）
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 只在没有输入框获得焦点时处理
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      switch (e.key) {
+        case 'ArrowLeft':
+          e.preventDefault()
+          handleSkipBack()
+          break
+        case 'ArrowRight':
+          e.preventDefault()
+          handleSkipForward()
+          break
+        case ' ':
+          e.preventDefault()
+          onPlayPause()
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [currentTime, duration, onPlayPause, onSeek])
 
   // TODO: 此处应调用 usePlayerStore 获取当前进度
   const handleProgressClick = useCallback(
@@ -131,9 +160,29 @@ export function PlaybackControls({
           onClick={handleSkipBack}
           className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary"
           aria-label="后退 10 秒"
+          title="← 后退 10 秒"
         >
           <SkipBack size={20} />
         </button>
+
+        {/* Quick Skip Back Buttons (P5-5) */}
+        <div className="flex gap-1">
+          {[5, 10, 30].map((seconds) => (
+            <button
+              key={`back-${seconds}`}
+              onClick={() => {
+                const newTime = Math.max(0, currentTime - seconds)
+                onSeek(newTime)
+              }}
+              className="px-2 py-1 text-xs font-mono rounded bg-secondary/50 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              aria-label={`后退 ${seconds} 秒`}
+              title={`后退 ${seconds} 秒`}
+            >
+              <ChevronLeft size={14} className="inline mr-0.5" />
+              {seconds}s
+            </button>
+          ))}
+        </div>
 
         {/* Play/Pause */}
         <button
@@ -145,6 +194,7 @@ export function PlaybackControls({
             "simpod-glow"
           )}
           aria-label={isPlaying ? "暂停" : "播放"}
+          title={isPlaying ? "暂停 (Space)" : "播放 (Space)"}
         >
           {isPlaying ? (
             <Pause size={24} fill="currentColor" />
@@ -153,11 +203,31 @@ export function PlaybackControls({
           )}
         </button>
 
+        {/* Quick Skip Forward Buttons (P5-5) */}
+        <div className="flex gap-1">
+          {[5, 10, 30].map((seconds) => (
+            <button
+              key={`forward-${seconds}`}
+              onClick={() => {
+                const newTime = Math.min(duration, currentTime + seconds)
+                onSeek(newTime)
+              }}
+              className="px-2 py-1 text-xs font-mono rounded bg-secondary/50 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              aria-label={`快进 ${seconds} 秒`}
+              title={`快进 ${seconds} 秒`}
+            >
+              {seconds}s
+              <ChevronRight size={14} className="inline ml-0.5" />
+            </button>
+          ))}
+        </div>
+
         {/* Skip Forward */}
         <button
           onClick={handleSkipForward}
           className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary"
           aria-label="快进 10 秒"
+          title="→ 快进 10 秒"
         >
           <SkipForward size={20} />
         </button>
