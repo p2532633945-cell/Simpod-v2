@@ -42,6 +42,10 @@ export interface HotzoneMetadata {
   confidence?: number
   difficulty_score?: number
   user_id?: string
+  title?: string
+  description?: string
+  duration?: number
+  audioUrl?: string
   user_adjustment_history?: Array<{
     action: string
     timestamp: string

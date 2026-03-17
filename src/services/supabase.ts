@@ -184,6 +184,115 @@ export const updateHotzoneStatus = async (
 };
 
 /**
+ * 更新热区（P5-4）
+ * 
+ * 支持编辑时间范围、标题、描述等
+ * 用户数据隔离 - 确保只能更新自己的热区
+ */
+export const updateHotzone = async (hotzone: Hotzone): Promise<Hotzone> => {
+  const supabase = createClient();
+
+  // 获取当前用户
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+
+  // 创建更新负载
+  const payload: Record<string, unknown> = {
+    start_time: hotzone.start_time,
+    end_time: hotzone.end_time,
+    status: hotzone.status,
+    metadata: hotzone.metadata,
+  };
+
+  // 将 transcript_words 移到 metadata 中
+  if (hotzone.transcript_words) {
+    payload.metadata = {
+      ...(hotzone.metadata as object),
+      transcript_words: hotzone.transcript_words
+    };
+  }
+
+  try {
+    console.log('[Supabase] Updating hotzone:', { id: hotzone.id, userId: user.id });
+    
+    const { data, error } = await supabase
+      .from('hotzones')
+      .update(payload)
+      .eq('id', hotzone.id)
+      .eq('user_id', user.id)
+      .select()
+      .single();
+
+    if (error) {
+      const errorInfo = {
+        message: String(error.message || 'Unknown error'),
+        code: String(error.code || 'UNKNOWN'),
+        hotzoneId: hotzone.id,
+        userId: user.id
+      };
+      console.error('[Supabase] Error updating hotzone:', errorInfo);
+      throw new Error(errorInfo.message);
+    }
+
+    console.log('[Supabase] Hotzone updated successfully:', hotzone.id);
+    
+    // 转换返回数据
+    if (data.metadata?.transcript_words) {
+      return { ...data, transcript_words: data.metadata.transcript_words };
+    }
+    return data as Hotzone;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[Supabase] updateHotzone exception:', { message, hotzoneId: hotzone.id });
+    throw err;
+  }
+};
+
+/**
+ * 删除热区（P5-4）
+ * 
+ * 用户数据隔离 - 确保只能删除自己的热区
+ */
+export const deleteHotzone = async (hotzoneId: string): Promise<void> => {
+  const supabase = createClient();
+
+  // 获取当前用户
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+
+  try {
+    console.log('[Supabase] Deleting hotzone:', { id: hotzoneId, userId: user.id });
+    
+    const { error } = await supabase
+      .from('hotzones')
+      .delete()
+      .eq('id', hotzoneId)
+      .eq('user_id', user.id);
+
+    if (error) {
+      const errorInfo = {
+        message: String(error.message || 'Unknown error'),
+        code: String(error.code || 'UNKNOWN'),
+        hotzoneId,
+        userId: user.id
+      };
+      console.error('[Supabase] Error deleting hotzone:', errorInfo);
+      throw new Error(errorInfo.message);
+    }
+
+    console.log('[Supabase] Hotzone deleted successfully:', hotzoneId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[Supabase] deleteHotzone exception:', { message, hotzoneId });
+    throw err;
+  }
+};
+
+/**
  * 获取指定音频的所有热区
  *
  * 将 metadata.transcript_words 拉到顶层供UI使用

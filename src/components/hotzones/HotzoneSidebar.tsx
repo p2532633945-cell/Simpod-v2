@@ -3,15 +3,16 @@
 /**
  * HotzoneSidebar - 热区列表侧边栏组件
  * 
- * 显示热区列表，支持过滤和状态切换
+ * 显示热区列表，支持过滤、状态切换和编辑
  */
 
 import { useState, useMemo, useCallback } from "react"
-import { Check, Clock, Archive, Filter, ChevronRight } from "lucide-react"
+import { Check, Clock, Archive, Filter, ChevronRight, Edit2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { HotzoneSidebarProps, Hotzone, HotzoneFilter } from "@/types/simpod"
 import { formatTime } from "@/lib/mock-data"
 import { TranscriptSnippet } from "@/components/transcript/TranscriptStream"
+import { HotzoneEditModal } from "./HotzoneEditModal"
 
 const FILTER_OPTIONS: { value: HotzoneFilter; label: string; icon: React.ReactNode }[] = [
   { value: "all", label: "All", icon: <Filter size={14} /> },
@@ -30,6 +31,8 @@ export function HotzoneSidebar({
   // TODO: 此处应调用 useHotzoneStore 获取当前 audio_id 的 hotzones
 
   const [filter, setFilter] = useState<HotzoneFilter>("all")
+  const [editingHotzone, setEditingHotzone] = useState<Hotzone | null>(null)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
 
   // 过滤热区
   const filteredHotzones = useMemo(() => {
@@ -55,71 +58,140 @@ export function HotzoneSidebar({
     [onHotzoneJump, onHotzoneSelect]
   )
 
-  return (
-    <div className="flex flex-col h-full bg-card border-l border-border">
-      {/* Header */}
-      <div className="p-4 border-b border-border">
-        <h2 className="text-lg font-semibold text-foreground mb-3">Hotzones</h2>
+  const handleEditClick = useCallback((hotzone: Hotzone) => {
+    setEditingHotzone(hotzone)
+    setIsEditModalOpen(true)
+  }, [])
 
-        {/* Filter tabs */}
-        <div className="flex gap-1 flex-wrap">
-          {FILTER_OPTIONS.map(({ value, label, icon }) => (
-            <button
-              key={value}
-              onClick={() => setFilter(value)}
-              className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium",
-                "transition-colors duration-200",
-                filter === value
-                  ? "bg-simpod-mark/10 text-simpod-primary border border-simpod-mark/20"
-                  : "bg-secondary/50 text-muted-foreground hover:text-foreground hover:bg-secondary"
-              )}
-            >
-              {icon}
-              <span>{label}</span>
-              <span
+  const handleSaveHotzone = async (updatedHotzone: Hotzone) => {
+    try {
+      console.log('[HotzoneSidebar] Saving hotzone:', updatedHotzone.id)
+      const response = await fetch('/api/hotzones', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...updatedHotzone, id: updatedHotzone.id })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to save hotzone')
+      }
+
+      console.log('[HotzoneSidebar] Hotzone saved successfully')
+      // Trigger a refresh of hotzones (this would be handled by parent component)
+      window.location.reload()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      console.error('[HotzoneSidebar] Error saving hotzone:', message)
+      throw err
+    }
+  }
+
+  const handleDeleteHotzone = async (hotzoneId: string) => {
+    try {
+      console.log('[HotzoneSidebar] Deleting hotzone:', hotzoneId)
+      const response = await fetch(`/api/hotzones?id=${hotzoneId}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to delete hotzone')
+      }
+
+      console.log('[HotzoneSidebar] Hotzone deleted successfully')
+      // Trigger a refresh of hotzones
+      window.location.reload()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      console.error('[HotzoneSidebar] Error deleting hotzone:', message)
+      throw err
+    }
+  }
+
+  return (
+    <>
+      <div className="flex flex-col h-full bg-card border-l border-border">
+        {/* Header */}
+        <div className="p-4 border-b border-border">
+          <h2 className="text-lg font-semibold text-foreground mb-3">Hotzones</h2>
+
+          {/* Filter tabs */}
+          <div className="flex gap-1 flex-wrap">
+            {FILTER_OPTIONS.map(({ value, label, icon }) => (
+              <button
+                key={value}
+                onClick={() => setFilter(value)}
                 className={cn(
-                  "ml-1 px-1.5 py-0.5 rounded text-[10px]",
+                  "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium",
+                  "transition-colors duration-200",
                   filter === value
-                    ? "bg-simpod-mark/20"
-                    : "bg-secondary"
+                    ? "bg-simpod-mark/10 text-simpod-primary border border-simpod-mark/20"
+                    : "bg-secondary/50 text-muted-foreground hover:text-foreground hover:bg-secondary"
                 )}
               >
-                {counts[value]}
-              </span>
-            </button>
-          ))}
+                {icon}
+                <span>{label}</span>
+                <span
+                  className={cn(
+                    "ml-1 px-1.5 py-0.5 rounded text-[10px]",
+                    filter === value
+                      ? "bg-simpod-mark/20"
+                      : "bg-secondary"
+                  )}
+                >
+                  {counts[value]}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Hotzone List */}
+        <div className="flex-1 overflow-y-auto scrollbar-simpod p-2">
+          {filteredHotzones.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-center p-4">
+              <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center mb-3">
+                <Filter size={20} className="text-muted-foreground" />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                No hotzones in this category
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredHotzones.map((hotzone) => (
+                <HotzoneCard
+                  key={hotzone.id}
+                  hotzone={hotzone}
+                  isSelected={selectedHotzoneId === hotzone.id}
+                  onClick={() => handleHotzoneClick(hotzone)}
+                  onToggleReviewed={(reviewed) =>
+                    onHotzoneToggleReviewed(hotzone.id, reviewed)
+                  }
+                  onEdit={() => handleEditClick(hotzone)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Hotzone List */}
-      <div className="flex-1 overflow-y-auto scrollbar-simpod p-2">
-        {filteredHotzones.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center p-4">
-            <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center mb-3">
-              <Filter size={20} className="text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground">
-              No hotzones in this category
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {filteredHotzones.map((hotzone) => (
-              <HotzoneCard
-                key={hotzone.id}
-                hotzone={hotzone}
-                isSelected={selectedHotzoneId === hotzone.id}
-                onClick={() => handleHotzoneClick(hotzone)}
-                onToggleReviewed={(reviewed) =>
-                  onHotzoneToggleReviewed(hotzone.id, reviewed)
-                }
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+      {/* Edit Modal */}
+      {editingHotzone && (
+        <HotzoneEditModal
+          hotzone={editingHotzone}
+          isOpen={isEditModalOpen}
+          onClose={() => {
+            setIsEditModalOpen(false)
+            setEditingHotzone(null)
+          }}
+          onSave={handleSaveHotzone}
+          onDelete={handleDeleteHotzone}
+          maxDuration={editingHotzone.metadata?.duration || 3600}
+        />
+      )}
+    </>
   )
 }
 
@@ -131,11 +203,13 @@ function HotzoneCard({
   isSelected,
   onClick,
   onToggleReviewed,
+  onEdit,
 }: {
   hotzone: Hotzone
   isSelected: boolean
   onClick: () => void
   onToggleReviewed: (reviewed: boolean) => void
+  onEdit: () => void
 }) {
   const statusConfig = {
     pending: {
@@ -161,7 +235,7 @@ function HotzoneCard({
     <div
       className={cn(
         "p-3 rounded-lg cursor-pointer",
-        "border transition-all duration-200",
+        "border transition-all duration-200 group",
         isSelected
           ? "bg-simpod-mark/5 border-simpod-mark/30"
           : "bg-secondary/30 border-transparent hover:bg-secondary/50 hover:border-border"
@@ -182,22 +256,34 @@ function HotzoneCard({
           )}
         </div>
 
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            onToggleReviewed(hotzone.status !== "reviewed")
-          }}
-          className={cn(
-            "flex items-center gap-1 px-2 py-0.5 rounded text-xs",
-            config.bg,
-            config.color,
-            "hover:opacity-80 transition-opacity"
-          )}
-          aria-label={`Status: ${hotzone.status}`}
-        >
-          {config.icon}
-          <span className="capitalize">{hotzone.status}</span>
-        </button>
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onEdit()
+            }}
+            className="p-1 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Edit hotzone"
+          >
+            <Edit2 size={14} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleReviewed(hotzone.status !== "reviewed")
+            }}
+            className={cn(
+              "flex items-center gap-1 px-2 py-0.5 rounded text-xs",
+              config.bg,
+              config.color,
+              "hover:opacity-80 transition-opacity"
+            )}
+            aria-label={`Status: ${hotzone.status}`}
+          >
+            {config.icon}
+            <span className="capitalize">{hotzone.status}</span>
+          </button>
+        </div>
       </div>
 
       {/* Transcript snippet */}
