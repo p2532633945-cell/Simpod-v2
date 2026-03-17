@@ -14,7 +14,6 @@ import type { PlaybackControlsProps } from "@/types/simpod"
 import { formatTime } from "@/lib/time"
 
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2]
-const SKIP_INTERVALS = [5, 10, 30] // seconds
 
 export function PlaybackControls({
   playerState,
@@ -59,6 +58,7 @@ export function PlaybackControls({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTime, duration, onPlayPause, onSeek])
 
   // TODO: 此处应调用 usePlayerStore 获取当前进度
