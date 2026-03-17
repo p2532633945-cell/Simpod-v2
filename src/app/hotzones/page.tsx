@@ -16,7 +16,6 @@ import {
   Archive,
   Play,
   Flame,
-  Search,
   CheckCheck,
   Loader2,
   AlertCircle,
@@ -29,6 +28,7 @@ import type { Hotzone, HotzoneFilter } from "@/types/simpod"
 import { fetchAllHotzones, updateHotzoneStatus, updateHotzoneTranscript } from "@/services/supabase"
 import { AnalyticsDashboard } from "@/components/hotzones/AnalyticsDashboard"
 import { TranscriptEditor } from "@/components/transcript/TranscriptEditor"
+import { TranscriptSearch } from "@/components/transcript/TranscriptSearch"
 
 const FILTER_OPTIONS: { value: HotzoneFilter; label: string; icon: React.ReactNode }[] = [
   { value: "all", label: "All", icon: <Filter size={14} /> },
@@ -39,7 +39,6 @@ const FILTER_OPTIONS: { value: HotzoneFilter; label: string; icon: React.ReactNo
 
 export default function HotzonesPage() {
   const [filter, setFilter] = useState<HotzoneFilter>("all")
-  const [searchQuery, setSearchQuery] = useState("")
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [hotzones, setHotzones] = useState<Hotzone[]>([])
   const [loading, setLoading] = useState(true)
@@ -71,25 +70,11 @@ export default function HotzonesPage() {
     loadHotzones()
   }, [loadHotzones])
 
-  // 过滤热区
+  // 过滤热区（搜索功能已由 TranscriptSearch 组件处理）
   const filteredHotzones = useMemo(() => {
-    let result = hotzones
-
-    if (filter !== "all") {
-      result = result.filter((hz) => hz.status === filter)
-    }
-
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase()
-      result = result.filter(
-        (hz) =>
-          hz.transcript_snippet?.toLowerCase().includes(query) ||
-          hz.audio_id.toLowerCase().includes(query)
-      )
-    }
-
-    return result
-  }, [hotzones, filter, searchQuery])
+    if (filter === "all") return hotzones
+    return hotzones.filter((hz) => hz.status === filter)
+  }, [hotzones, filter])
 
   // P4-5 性能优化：分页显示
   const paginatedHotzones = useMemo(() => {
@@ -201,12 +186,11 @@ export default function HotzonesPage() {
             >
               <BarChart2 size={16} />
             </button>
-            <div className="relative max-w-xs w-full">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search hotzones..."
-                className={cn("w-full pl-9 pr-3 py-2 rounded-lg bg-secondary/50 border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-simpod-mark/50")}
-              />
-            </div>
+            <TranscriptSearch
+              hotzones={hotzones}
+              onHotzoneJump={handleHotzoneJump}
+              className="w-64"
+            />
           </div>
         </div>
       </header>
