@@ -52,6 +52,20 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
   // ============================================
 
   const audioRef = useRef<HTMLAudioElement>(null)
+  // 记录上次设置的 proxied URL，防止重复赋值导致音频重载
+  const lastSrcRef = useRef<string>('')
+
+  // 只在 audioUrl 真正变化时才更新 audio.src（避免组件重渲染触发 loadstart）
+  const proxiedUrl = audioUrl ? `/api/audio-proxy?url=${encodeURIComponent(audioUrl)}` : ''
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio || !proxiedUrl) return
+    if (lastSrcRef.current === proxiedUrl) return  // 没变化，跳过
+    console.log('[Player] Setting audio src:', proxiedUrl)
+    lastSrcRef.current = proxiedUrl
+    audio.src = proxiedUrl
+    audio.load()
+  }, [proxiedUrl])
 
   // 从 store 获取状态和 actions
   const {
@@ -541,7 +555,6 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
       {/* 通过 audio-proxy 加载以解决 CORS 问题 */}
       <audio
         ref={audioRef}
-        src={`/api/audio-proxy?url=${encodeURIComponent(audioUrl)}`}
         preload="auto"
         crossOrigin="anonymous"
         className="hidden"
