@@ -3,6 +3,7 @@
   "short_name": "Simpod",
   "description": "AI-Powered Podcast Player for Language Learners. One-tap marking for the 20% you don't understand.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0a0a0f",
   "theme_color": "#00cffd",
@@ -43,7 +44,7 @@
       "src": "/icons/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-384x384.png",
@@ -55,7 +56,19 @@
       "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192x192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512x512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "shortcuts": [
@@ -64,13 +77,6 @@
       "short_name": "Hotzones",
       "description": "Review your saved hotzones",
       "url": "/hotzones",
-      "icons": [{ "src": "/icons/icon-96x96.png", "sizes": "96x96", "type": "image/png" }]
-    },
-    {
-      "name": "Discover Podcasts",
-      "short_name": "Discover",
-      "description": "Search and discover podcasts",
-      "url": "/discover",
       "icons": [{ "src": "/icons/icon-96x96.png", "sizes": "96x96", "type": "image/png" }]
     }
   ]
