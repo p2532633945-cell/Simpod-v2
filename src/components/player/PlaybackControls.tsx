@@ -91,12 +91,12 @@ export function PlaybackControls({
   )
 
   const handleSkipBack = useCallback(() => {
-    const newTime = Math.max(0, currentTime - 10)
+    const newTime = Math.max(0, currentTime - 15)
     onSeek(newTime)
   }, [currentTime, onSeek])
 
   const handleSkipForward = useCallback(() => {
-    const newTime = Math.min(duration, currentTime + 10)
+    const newTime = Math.min(duration, currentTime + 15)
     onSeek(newTime)
   }, [currentTime, duration, onSeek])
 
@@ -159,30 +159,21 @@ export function PlaybackControls({
         <button
           onClick={handleSkipBack}
           className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary"
-          aria-label="后退 10 秒"
-          title="← 后退 10 秒"
+          aria-label="后退 15 秒"
+          title="← 后退 15 秒"
         >
           <SkipBack size={20} />
         </button>
 
-        {/* Quick Skip Back Buttons (P5-5) */}
-        <div className="flex gap-1">
-          {[5, 10, 30].map((seconds) => (
-            <button
-              key={`back-${seconds}`}
-              onClick={() => {
-                const newTime = Math.max(0, currentTime - seconds)
-                onSeek(newTime)
-              }}
-              className="px-2 py-1 text-xs font-mono rounded bg-secondary/50 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-              aria-label={`后退 ${seconds} 秒`}
-              title={`后退 ${seconds} 秒`}
-            >
-              <ChevronLeft size={14} className="inline mr-0.5" />
-              {seconds}s
-            </button>
-          ))}
-        </div>
+        {/* 15s Skip Back (P5-5 简化版) */}
+        <button
+          onClick={() => onSeek(Math.max(0, currentTime - 15))}
+          className="px-2.5 py-1.5 text-xs font-mono rounded-lg bg-secondary/50 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+          aria-label="后退 15 秒"
+          title="后退 15 秒"
+        >
+          <ChevronLeft size={14} className="inline mr-0.5" />15s
+        </button>
 
         {/* Play/Pause */}
         <button
@@ -203,31 +194,22 @@ export function PlaybackControls({
           )}
         </button>
 
-        {/* Quick Skip Forward Buttons (P5-5) */}
-        <div className="flex gap-1">
-          {[5, 10, 30].map((seconds) => (
-            <button
-              key={`forward-${seconds}`}
-              onClick={() => {
-                const newTime = Math.min(duration, currentTime + seconds)
-                onSeek(newTime)
-              }}
-              className="px-2 py-1 text-xs font-mono rounded bg-secondary/50 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-              aria-label={`快进 ${seconds} 秒`}
-              title={`快进 ${seconds} 秒`}
-            >
-              {seconds}s
-              <ChevronRight size={14} className="inline ml-0.5" />
-            </button>
-          ))}
-        </div>
+        {/* 15s Skip Forward (P5-5 简化版) */}
+        <button
+          onClick={() => onSeek(Math.min(duration, currentTime + 15))}
+          className="px-2.5 py-1.5 text-xs font-mono rounded-lg bg-secondary/50 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+          aria-label="快进 15 秒"
+          title="快进 15 秒"
+        >
+          15s<ChevronRight size={14} className="inline ml-0.5" />
+        </button>
 
         {/* Skip Forward */}
         <button
           onClick={handleSkipForward}
           className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary"
-          aria-label="快进 10 秒"
-          title="→ 快进 10 秒"
+          aria-label="快进 15 秒"
+          title="→ 快进 15 秒"
         >
           <SkipForward size={20} />
         </button>

@@ -21,6 +21,7 @@ import {
   AlertCircle,
   RefreshCw,
   BarChart2,
+  RotateCcw,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatDate } from "@/lib/mock-data"; import { formatTime } from "@/lib/time"
@@ -300,12 +301,9 @@ function HotzoneCard({ hotzone, isSelected, isUpdating, onSelect, onJump, onStat
   onStatusChange: (status: 'pending' | 'reviewed' | 'archived') => void
   onTranscriptSave: (hotzoneId: string, text: string, note: string) => Promise<void>
 }) {
-  const statusConfig: Record<'pending' | 'reviewed' | 'archived', { color: string; bg: string; label: string; next: 'pending' | 'reviewed' | 'archived' }> = {
-    pending:  { color: "text-amber-500",        bg: "bg-amber-500/10",  label: "Pending",  next: "reviewed" },
-    reviewed: { color: "text-green-500",        bg: "bg-green-500/10",  label: "Reviewed", next: "archived" },
-    archived: { color: "text-muted-foreground", bg: "bg-muted/50",       label: "Archived", next: "pending"  },
-  }
-  const cfg = statusConfig[hotzone.status as 'pending' | 'reviewed' | 'archived'] || statusConfig.pending
+  const isPending = hotzone.status === 'pending'
+  const isReviewed = hotzone.status === 'reviewed'
+  const isArchived = hotzone.status === 'archived'
 
   return (
     <div className={cn("p-4 rounded-xl border transition-all", isSelected ? "bg-simpod-mark/5 border-simpod-mark/30" : "bg-card border-border hover:border-simpod-mark/20")}>
@@ -319,18 +317,44 @@ function HotzoneCard({ hotzone, isSelected, isUpdating, onSelect, onJump, onStat
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">{hotzone.audio_id}</span>
+            {/* 状态指示点 */}
+            <span className={cn(
+              "w-1.5 h-1.5 rounded-full flex-shrink-0",
+              isPending ? "bg-amber-500" : isReviewed ? "bg-green-500" : "bg-muted-foreground/40"
+            )} title={hotzone.status} />
           </div>
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-mono text-simpod-primary">
               {formatTime(hotzone.start_time)} – {formatTime(hotzone.end_time)}
             </span>
-            <button onClick={() => onStatusChange(cfg.next)} disabled={isUpdating}
-              className={cn("flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-opacity", cfg.bg, cfg.color,
-                isUpdating ? "opacity-50 cursor-not-allowed" : "hover:opacity-80")}
-            >
-              {isUpdating ? <Loader2 size={12} className="animate-spin" /> : null}
-              <span>{cfg.label}</span>
-            </button>
+            {/* 直接 Review / Unmark 按钮 */}
+            {!isArchived ? (
+              <button
+                onClick={() => onStatusChange(isReviewed ? 'pending' : 'reviewed')}
+                disabled={isUpdating}
+                className={cn(
+                  "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all",
+                  isUpdating ? "opacity-50 cursor-not-allowed" : "",
+                  isReviewed
+                    ? "bg-green-500/10 text-green-500 hover:bg-green-500/20"
+                    : "bg-secondary text-muted-foreground hover:bg-green-500/10 hover:text-green-500"
+                )}
+              >
+                {isUpdating
+                  ? <Loader2 size={12} className="animate-spin" />
+                  : <Check size={12} />
+                }
+                {isReviewed ? 'Reviewed' : 'Mark reviewed'}
+              </button>
+            ) : (
+              <button
+                onClick={() => onStatusChange('pending')}
+                disabled={isUpdating}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              >
+                <RotateCcw size={12} /> Restore
+              </button>
+            )}
           </div>
 
           {/* P5-7: 转录编辑器 */}
