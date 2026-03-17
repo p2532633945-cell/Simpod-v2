@@ -21,11 +21,13 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
+  BarChart2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatDate } from "@/lib/mock-data"; import { formatTime } from "@/lib/time"
 import type { Hotzone, HotzoneFilter } from "@/types/simpod"
 import { fetchAllHotzones, updateHotzoneStatus } from "@/services/supabase"
+import { AnalyticsDashboard } from "@/components/hotzones/AnalyticsDashboard"
 
 const FILTER_OPTIONS: { value: HotzoneFilter; label: string; icon: React.ReactNode }[] = [
   { value: "all", label: "All", icon: <Filter size={14} /> },
@@ -43,6 +45,7 @@ export default function HotzonesPage() {
   const [error, setError] = useState<string | null>(null)
   const [updatingIds, setUpdatingIds] = useState<Set<string>>(new Set())
   const [currentPage, setCurrentPage] = useState(1)
+  const [showAnalytics, setShowAnalytics] = useState(false)
   const ITEMS_PER_PAGE = 20 // P4-5 性能优化：分页加载
 
   // 加载真实热区数据
@@ -177,6 +180,16 @@ export default function HotzonesPage() {
             <button onClick={loadHotzones} disabled={loading} className="p-2 rounded-lg hover:bg-secondary transition-colors disabled:opacity-50">
               <RefreshCw size={16} className={cn("text-muted-foreground", loading && "animate-spin")} />
             </button>
+            <button
+              onClick={() => setShowAnalytics(prev => !prev)}
+              className={cn(
+                "p-2 rounded-lg transition-colors",
+                showAnalytics ? "bg-simpod-mark/10 text-simpod-primary" : "hover:bg-secondary text-muted-foreground"
+              )}
+              title="Toggle Analytics"
+            >
+              <BarChart2 size={16} />
+            </button>
             <div className="relative max-w-xs w-full">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search hotzones..."
@@ -195,6 +208,12 @@ export default function HotzonesPage() {
               <p className="text-sm text-red-500">{error}</p>
               <button onClick={loadHotzones} className="mt-2 text-xs text-red-400 underline">Try again</button>
             </div>
+          </div>
+        )}
+        {/* P5-6: 统计分析仪表板 */}
+        {showAnalytics && !loading && (
+          <div className="mb-6">
+            <AnalyticsDashboard hotzones={hotzones} />
           </div>
         )}
         {loading && (
