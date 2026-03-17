@@ -327,7 +327,9 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
       audio.removeEventListener("ended", handleEnded)
       audio.removeEventListener("error", handleError)
     }
-  }, [setCurrentTime, setDuration, setIsPlaying, audioUrl])
+  // audioUrl removed from deps: src is set imperatively, not needed here
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setCurrentTime, setDuration, setIsPlaying])
 
   // 加载当前 audio_id 的热区 - 从数据库
   useEffect(() => {
