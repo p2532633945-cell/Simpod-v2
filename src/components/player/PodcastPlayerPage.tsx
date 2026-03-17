@@ -8,7 +8,7 @@
  */
 
 import { useState, useCallback, useMemo, useRef, useEffect } from "react"
-import { ArrowLeft, Settings, Share2, Loader2, AlertCircle, Music } from "lucide-react"
+import { ArrowLeft, Settings, Share2, Loader2, AlertCircle, Music, Gauge, RotateCcw } from "lucide-react"
 import Link from "next/link"
 
 // 子组件
@@ -33,9 +33,13 @@ interface PodcastPlayerPageProps {
   audioUrl?: string
   startTime?: number
   autoPlay?: boolean
+  episodeTitle?: string
+  podcastTitle?: string
+  artwork?: string
+  feedUrl?: string
 }
 
-export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay }: PodcastPlayerPageProps) {
+export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, episodeTitle, podcastTitle, artwork, feedUrl }: PodcastPlayerPageProps) {
   // ============================================
   // 加载状态
   // ============================================
@@ -62,7 +66,12 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay }: Po
     setIsPlaying,
     setAudioRef,
     addHotzone,
-    setHotzones,
+    hotzoneRange,
+    setHotzoneRange,
+    instantReplayMode,
+    toggleInstantReplayMode,
+    seek,
+    setCurrentEpisodeInfo,
   } = usePlayerStore()
 
   // 本地状态：选中热区（UI 状态不需要放入 store）
@@ -78,6 +87,38 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay }: Po
       setAudioRef(audioRef.current)
     }
   }, [setAudioRef])
+
+  // 设置当前播放集信息（供 MiniPlayer 使用）
+  useEffect(() => {
+    if (audioUrl) {
+      // 构建完整的返回 URL（播客列表页）
+      const podcastPageUrl = feedUrl
+        ? `/podcast/${encodeURIComponent(audioId)}?feedUrl=${encodeURIComponent(feedUrl)}`
+        : '/'
+
+      // 构建 MiniPlayer 点击跳回播放器的完整 URL
+      const workspaceParams = new URLSearchParams()
+      workspaceParams.set('audioUrl', audioUrl)
+      if (feedUrl) workspaceParams.set('feedUrl', feedUrl)
+      if (episodeTitle) workspaceParams.set('episodeTitle', episodeTitle)
+      if (podcastTitle) workspaceParams.set('podcastTitle', podcastTitle)
+      if (artwork) workspaceParams.set('artwork', artwork)
+
+      setCurrentEpisodeInfo({
+        audioId,
+        audioUrl,
+        title: episodeTitle || `Episode ${audioId}`,
+        artwork: artwork || undefined,
+        podcastTitle: podcastTitle || 'Simpod',
+        feedUrl: feedUrl || undefined,
+        episodeTitle,
+        podcastPageUrl,
+      })
+    }
+    return () => {
+      // 离开页面时不清除，保持 MiniPlayer 显示
+    }
+  }, [audioId, audioUrl, episodeTitle, artwork, podcastTitle, feedUrl, setCurrentEpisodeInfo])
 
   // 音频事件处理 - 更新 Zustand store
   useEffect(() => {
@@ -283,66 +324,51 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay }: Po
         // 重置自动播放标志位
         autoPlayExecutedRef.current = false
         
-        // 重置播放器状态和热区
-        const { setHotzones: setHotzonesDirect, setCurrentTime: setCurrentTimeDirect, setIsPlaying: setIsPlayingDirect } = usePlayerStore.getState()
+        // 重置热区列表（不重置播放状态，MiniPlayer 需要继续播放）
+        const { setHotzones: setHotzonesDirect } = usePlayerStore.getState()
         setHotzonesDirect([])
-        setCurrentTimeDirect(0)
-        setIsPlayingDirect(false)
-        console.log("[Player] DIAG: Reset player state - hotzones cleared, currentTime=0, isPlaying=false")
-        
-        // 同时重置 audio 元素
-        if (audioRef.current) {
-          audioRef.current.currentTime = 0
-          audioRef.current.pause()
-          console.log('[Player] DIAG: Audio element reset:', { currentTime: 0, paused: true })
-        }
+        console.log("[Player] DIAG: Reset hotzones for new audioId")
         
         const fetchedHotzones = await fetchHotzones(audioId)
-        console.log("[Player] DIAG: Fetched hotzones:", fetchedHotzones.map(hz => ({ 
-          id: hz.id, 
-          audio_id: hz.audio_id, 
-          user_id: hz.metadata?.user_id,
-          start: hz.start_time,
-          end: hz.end_time
-        })))
-        
-        fetchedHotzones.forEach(hz => addHotzone(hz))
-        console.log("[Player] DIAG: Added all hotzones to store, total count:", fetchedHotzones.length)
+        console.log("[Player] DIAG: Fetched hotzones:", fetchedHotzones.length)
+
+        // 去重：防止重复 ID 导致 React key 冲突
+        const seen = new Set<string>()
+        const uniqueHotzones = fetchedHotzones.filter(hz => {
+          if (seen.has(hz.id)) {
+            console.warn('[Player] Duplicate hotzone ID filtered out:', hz.id)
+            return false
+          }
+          seen.add(hz.id)
+          return true
+        })
+
+        // 一次性设置，避免多次 addHotzone 在 StrictMode 下重复
+        setHotzonesDirect(uniqueHotzones)
+        console.log("[Player] DIAG: Set hotzones in store, unique count:", uniqueHotzones.length)
       } catch (err) {
         const error = err as Error
-        const errorInfo = {
-          message: error.message || 'Unknown error',
-          name: error.name || 'Unknown',
-          stack: error.stack,
-          audioId
-        }
-        console.error("[Player] Failed to load hotzones:", errorInfo)
+        console.error("[Player] Failed to load hotzones:", error.message)
 
         // Fallback to mock data if database fetch fails
         const { mockHotzones } = await import("@/lib/mock-data")
         const filteredHotzones = mockHotzones.filter((hz) => hz.audio_id === audioId)
-        filteredHotzones.forEach(hz => addHotzone(hz))
+        const { setHotzones: setHotzonesDirect } = usePlayerStore.getState()
+        setHotzonesDirect(filteredHotzones)
       }
     }
 
     loadHotzones()
 
-    // 清理：当组件卸载或 audioId 变化时，清理状态
+    // 清理：只清除热区列表，不暂停音频（MiniPlayer 需要继续播放）
     return () => {
       if (audioId) {
-        console.log("[Player] DIAG: Cleanup for audioId:", audioId)
-        // 重置播放器状态
-        if (audioRef.current) {
-          audioRef.current.currentTime = 0
-          audioRef.current.pause()
-        }
-        const { setHotzones: setHotzonesDirect, setCurrentTime: setCurrentTimeDirect, setIsPlaying: setIsPlayingDirect } = usePlayerStore.getState()
+        console.log("[Player] DIAG: Cleanup hotzones for audioId:", audioId)
+        const { setHotzones: setHotzonesDirect } = usePlayerStore.getState()
         setHotzonesDirect([])
-        setCurrentTimeDirect(0)
-        setIsPlayingDirect(false)
       }
     }
-  }, [audioId, addHotzone])
+  }, [audioId])
 
   // 获取当前热区的转录词
   const currentTranscriptWords: Word[] = useMemo(() => {
@@ -414,21 +440,43 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay }: Po
 
       console.log("[Player] Creating hotzone from anchor at:", timestamp)
 
+      // P6-3: 读取当前档位 from store
+      const { hotzoneRange: currentRange } = usePlayerStore.getState()
+
       const [newHotzone] = await processAnchorsToHotzones(
         [anchor],
         undefined,
         undefined,
         audioUrl,
         undefined,
-        hotzones
+        hotzones,
+        currentRange
       )
 
       if (newHotzone) {
         console.log("[Player] Saving hotzone:", newHotzone.id)
-        await saveHotzone(newHotzone, audioUrl)
-        addHotzone(newHotzone)
-        setSelectedHotzoneId(newHotzone.id)
+        // 将当前集的元数据存入 hotzone.metadata，供首页「最近播放」使用
+        const enrichedHotzone = {
+          ...newHotzone,
+          metadata: {
+            ...newHotzone.metadata,
+            audioUrl: audioUrl || '',
+            episodeTitle: episodeTitle || '',
+            podcastTitle: podcastTitle || '',
+            artwork: artwork || '',
+          }
+        }
+        await saveHotzone(enrichedHotzone, audioUrl)
+        addHotzone(enrichedHotzone)
+        setSelectedHotzoneId(enrichedHotzone.id)
         console.log("[Player] Hotzone created successfully")
+
+        // P6-2: 即时回溯模式 — 热区生成后自动跳回起点
+        const { instantReplayMode: replayMode } = usePlayerStore.getState()
+        if (replayMode) {
+          console.log('[Player] Instant replay: seeking to hotzone start', enrichedHotzone.start_time)
+          seek(enrichedHotzone.start_time)
+        }
       }
     } catch (error) {
       console.error("[Player] Failed to create hotzone:", error)
@@ -436,7 +484,7 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay }: Po
     } finally {
       setIsMarking(false)
     }
-  }, [audioId, hotzones, addHotzone, audioUrl])
+  }, [audioId, hotzones, addHotzone, audioUrl, seek])
 
   // onHotzoneJump(hotzoneId: string, startTime: number): void
   const handleHotzoneJump = useCallback((hotzoneId: string, startTime: number) => {
@@ -509,9 +557,9 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay }: Po
       <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
         <div className="flex items-center gap-3">
           <Link
-            href="/"
+            href={feedUrl ? `/podcast/${encodeURIComponent(audioId)}?feedUrl=${encodeURIComponent(feedUrl)}` : '/'}
             className="p-2 rounded-lg hover:bg-secondary transition-colors"
-            aria-label="返回首页"
+            aria-label="返回播客列表"
           >
             <ArrowLeft size={20} className="text-muted-foreground" />
           </Link>
@@ -521,13 +569,18 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay }: Po
               className="w-10 h-10 rounded-lg bg-simpod-mark/10 flex items-center justify-center"
               aria-hidden="true"
             >
-              <div className="w-4 h-4 rounded-full bg-simpod-mark" />
+              {artwork ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={artwork} alt="" className="w-10 h-10 rounded-lg object-cover" />
+              ) : (
+                <div className="w-4 h-4 rounded-full bg-simpod-mark" />
+              )}
             </div>
             <div>
               <h1 className="text-sm font-semibold text-foreground line-clamp-1">
-                Episode {audioId}
+                {episodeTitle || `Episode ${audioId}`}
               </h1>
-              <p className="text-xs text-muted-foreground">Simpod Player</p>
+              <p className="text-xs text-muted-foreground">{podcastTitle || 'Simpod Player'}</p>
             </div>
           </div>
         </div>
@@ -610,6 +663,50 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay }: Po
                   />
                 )}
               </div>
+            </div>
+
+            {/* P6-3 + P6-2: 热区档位选择器 + 即时回溯开关 */}
+            <div className="mt-4 flex items-center justify-between gap-4">
+              {/* P6-3: 热区时间范围档位 */}
+              <div className="flex items-center gap-2">
+                <Gauge size={14} className="text-muted-foreground shrink-0" />
+                <span className="text-xs text-muted-foreground">Range:</span>
+                <div className="flex rounded-lg overflow-hidden border border-border">
+                  {([
+                    { key: 'tight', label: '3s', title: 'Tight — ±3s (single word/phrase)' },
+                    { key: 'normal', label: '10s', title: 'Normal — ±10s (default)' },
+                    { key: 'wide', label: '20s', title: 'Wide — ±20s (full context)' },
+                  ] as const).map(({ key, label, title }) => (
+                    <button
+                      key={key}
+                      onClick={() => setHotzoneRange(key)}
+                      title={title}
+                      className={`px-2.5 py-1 text-xs font-mono transition-colors ${
+                        hotzoneRange === key
+                          ? 'bg-simpod-mark text-simpod-dark font-semibold'
+                          : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-secondary'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* P6-2: 即时回溯开关 */}
+              <button
+                onClick={toggleInstantReplayMode}
+                title={instantReplayMode ? 'Instant Replay ON — click to disable' : 'Instant Replay OFF — click to enable'}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                  instantReplayMode
+                    ? 'bg-simpod-mark/15 border-simpod-mark/50 text-simpod-mark'
+                    : 'bg-transparent border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground'
+                }`}
+              >
+                <RotateCcw size={12} className={instantReplayMode ? 'animate-spin-slow' : ''} />
+                <span>Replay</span>
+                {instantReplayMode && <span className="w-1.5 h-1.5 rounded-full bg-simpod-mark" />}
+              </button>
             </div>
 
             {/* Audio Loading Indicator */}

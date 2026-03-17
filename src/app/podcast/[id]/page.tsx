@@ -167,7 +167,11 @@ export default function PodcastPage() {
       {/* Episodes List */}
       <EpisodeList
         episodes={episodes}
-        podcast={podcast}
+        podcast={{
+          title: podcast.title,
+          artwork: podcast.artwork,
+          feedUrl: feedUrl || undefined,
+        }}
       />
     </div>
   )

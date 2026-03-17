@@ -3,6 +3,21 @@
 import { create } from "zustand"
 import type { PlayerState, Hotzone } from "@/types/simpod"
 
+// P6-3: 热区时间范围档位
+export type HotzoneRange = 'tight' | 'normal' | 'wide'
+
+// Mini Player 当前播放信息
+export interface CurrentEpisodeInfo {
+  audioId: string
+  audioUrl: string
+  title: string
+  artwork?: string
+  podcastTitle?: string
+  feedUrl?: string
+  episodeTitle?: string
+  podcastPageUrl?: string  // 用于返回按钮的完整播客页面 URL
+}
+
 interface PlayerStore extends PlayerState {
   // Actions
   setCurrentTime: (time: number) => void
@@ -25,6 +40,19 @@ interface PlayerStore extends PlayerState {
   // Audio element ref
   audioRef: HTMLAudioElement | null
   setAudioRef: (ref: HTMLAudioElement | null) => void
+
+  // P6-3: 热区时间范围档位
+  hotzoneRange: HotzoneRange
+  setHotzoneRange: (range: HotzoneRange) => void
+
+  // P6-2: 即时回溯模式
+  instantReplayMode: boolean
+  setInstantReplayMode: (enabled: boolean) => void
+  toggleInstantReplayMode: () => void
+
+  // Mini Player: 当前播放集信息
+  currentEpisodeInfo: CurrentEpisodeInfo | null
+  setCurrentEpisodeInfo: (info: CurrentEpisodeInfo | null) => void
   
   // 清理方法
   cleanup: () => void
@@ -39,6 +67,19 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   volume: 1,
   hotzones: [],
   audioRef: null,
+
+  // Mini Player
+  currentEpisodeInfo: null,
+
+  // P6-3: 热区时间范围档位（持久化到 localStorage）
+  hotzoneRange: (typeof window !== 'undefined'
+    ? (localStorage.getItem('simpod_hotzone_range') as HotzoneRange) || 'normal'
+    : 'normal') as HotzoneRange,
+
+  // P6-2: 即时回溯模式（持久化到 localStorage）
+  instantReplayMode: typeof window !== 'undefined'
+    ? localStorage.getItem('simpod_instant_replay') === 'true'
+    : false,
 
   // Time actions
   setCurrentTime: (time) => set({ currentTime: time }),
@@ -119,6 +160,30 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   // Audio ref
   setAudioRef: (ref) => set({ audioRef: ref }),
+
+  // P6-3: 热区时间范围档位
+  setHotzoneRange: (range) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('simpod_hotzone_range', range)
+    }
+    set({ hotzoneRange: range })
+  },
+
+  // P6-2: 即时回溯模式
+  setInstantReplayMode: (enabled) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('simpod_instant_replay', String(enabled))
+    }
+    set({ instantReplayMode: enabled })
+  },
+
+  toggleInstantReplayMode: () => {
+    const { instantReplayMode, setInstantReplayMode } = get()
+    setInstantReplayMode(!instantReplayMode)
+  },
+
+  // Mini Player
+  setCurrentEpisodeInfo: (info) => set({ currentEpisodeInfo: info }),
 
   // 清理方法：重置状态并清理资源
   cleanup: () => {

@@ -147,6 +147,10 @@ export interface PlaybackControlsProps {
   onSeek: (time: number) => void
   onPlayPause: () => void
   onRateChange: (rate: number) => void
+  onPrevEpisode?: () => void
+  onNextEpisode?: () => void
+  hasPrev?: boolean
+  hasNext?: boolean
 }
 
 /** MARK 按钮组件 Props */

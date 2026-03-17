@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
+import { MiniPlayer } from "@/components/player/MiniPlayer"
 import "./globals.css"
 
 const geistSans = Geist({
@@ -26,6 +27,15 @@ export const metadata: Metadata = {
     "listening",
   ],
   authors: [{ name: "Simpod" }],
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Simpod",
+  },
+  formatDetection: {
+    telephone: false,
+  },
   openGraph: {
     title: "Simpod - Protect Your Flow",
     description:
@@ -38,6 +48,9 @@ export const viewport: Viewport = {
   themeColor: "#00cffd",
   width: "device-width",
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
 }
 
 export default function RootLayout({
@@ -47,6 +60,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* PWA iOS Safari */}
+        <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.svg" />
+        <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192x192.svg" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Simpod" />
+        {/* PWA splash screen color for older iOS */}
+        <meta name="msapplication-TileColor" content="#0a0a0f" />
+        <meta name="msapplication-TileImage" content="/icons/icon-144x144.svg" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
       >
@@ -57,7 +81,24 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           {children}
+          <MiniPlayer />
         </ThemeProvider>
+        {/* Register Service Worker */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').then(function(reg) {
+                    console.log('[PWA] Service Worker registered:', reg.scope);
+                  }).catch(function(err) {
+                    console.warn('[PWA] Service Worker registration failed:', err);
+                  });
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   )

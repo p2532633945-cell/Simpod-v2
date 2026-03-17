@@ -16,6 +16,7 @@ interface EpisodeListProps {
   podcast: {
     title: string
     artwork: string
+    feedUrl?: string
   }
 }
 
@@ -33,6 +34,7 @@ export function EpisodeList({ episodes, podcast }: EpisodeListProps) {
           onToggle={() => setExpandedId(expandedId === episode.id ? null : episode.id)}
           podcastTitle={podcast.title}
           podcastArtwork={podcast.artwork}
+          feedUrl={podcast.feedUrl}
         />
       ))}
     </div>
@@ -46,6 +48,7 @@ interface EpisodeItemProps {
   onToggle: () => void
   podcastTitle: string
   podcastArtwork: string
+  feedUrl?: string
 }
 
 function EpisodeItem({
@@ -53,37 +56,39 @@ function EpisodeItem({
   index,
   isExpanded,
   onToggle,
-  podcastTitle: _podcastTitle,
-  podcastArtwork: _podcastArtwork
+  podcastTitle,
+  podcastArtwork,
+  feedUrl,
 }: EpisodeItemProps) {
   const [playError, setPlayError] = useState<string | null>(null)
 
   const handlePlayClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    // 验证 audioUrl
     if (!episode.audioUrl || !episode.audioUrl.startsWith('http')) {
       setPlayError('Invalid audio URL')
       console.error('[EpisodeItem] Invalid audio URL:', episode.audioUrl)
       return
     }
     setPlayError(null)
-    console.log('[EpisodeItem] Playing episode:', episode.title, {
-      audioUrl: episode.audioUrl,
-    })
+    console.log('[EpisodeItem] Playing episode:', episode.title, { audioUrl: episode.audioUrl })
   }
 
-  // 直接传递原始音频 URL，让播放器通过代理加载
-  // 避免双重 encodeURIComponent 导致 URL 解析失败
-  const playUrl = episode.audioUrl
-    ? `/workspace/${encodeURIComponent(episode.id)}?audioUrl=${encodeURIComponent(episode.audioUrl)}`
-    : `/workspace/${encodeURIComponent(episode.id)}`
+  // 构建播放 URL，传递所有元数据给播放器页面
+  const params = new URLSearchParams()
+  if (episode.audioUrl) params.set('audioUrl', episode.audioUrl)
+  if (feedUrl) params.set('feedUrl', feedUrl)
+  if (episode.title) params.set('episodeTitle', episode.title)
+  if (podcastTitle) params.set('podcastTitle', podcastTitle)
+  const artworkSrc = episode.artwork || podcastArtwork
+  if (artworkSrc) params.set('artwork', artworkSrc)
+  const playUrl = `/workspace/${encodeURIComponent(episode.id)}?${params.toString()}`
 
   const formatDate = (dateString: string) => {
     try {
       return new Date(dateString).toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'short',
-        day: 'numeric'
+        day: 'numeric',
       })
     } catch {
       return dateString
@@ -94,7 +99,6 @@ function EpisodeItem({
     const hours = Math.floor(seconds / 3600)
     const mins = Math.floor((seconds % 3600) / 60)
     const secs = seconds % 60
-
     if (hours > 0) {
       return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
     }
@@ -103,19 +107,13 @@ function EpisodeItem({
 
   return (
     <div className="p-4 hover:bg-secondary/50 transition-colors">
-      <div
-        className="flex items-start gap-4 cursor-pointer"
-        onClick={onToggle}
-      >
+      <div className="flex items-start gap-4 cursor-pointer" onClick={onToggle}>
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-sm font-medium text-muted-foreground">
           {index}
         </div>
 
         <div className="flex-1 min-w-0">
-          <h3 className="font-medium text-foreground line-clamp-2">
-            {episode.title}
-          </h3>
-
+          <h3 className="font-medium text-foreground line-clamp-2">{episode.title}</h3>
           <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground">
             {episode.duration && (
               <div className="flex items-center gap-1">
@@ -128,7 +126,6 @@ function EpisodeItem({
               {formatDate(episode.pubDate)}
             </div>
           </div>
-
           {isExpanded && episode.description && (
             <p className="mt-3 text-sm text-muted-foreground line-clamp-3">
               {episode.description}

@@ -12,20 +12,28 @@ import { findExistingTranscript, saveTranscript } from './supabase';
 // Simple UUID generator
 const generateId = () => Math.random().toString(36).substring(2, 11);
 
+// P6-3: 热区时间范围档位对应的 buffer 秒数
+export const HOTZONE_RANGE_BUFFER: Record<string, number> = {
+  tight: 3,
+  normal: 10,
+  wide: 20,
+}
+
 /**
  * 从锚点生成热区
  */
 export const generateHotzoneFromAnchor = (
   anchor: Anchor,
-  transcript?: TranscriptSegment[]
+  transcript?: TranscriptSegment[],
+  bufferSeconds = 10
 ): Hotzone => {
-  // Layer 1: Mechanical (+/- 10s) with Reaction Offset (-2s)
+  // Layer 1: Mechanical (+/- bufferSeconds) with Reaction Offset (-2s)
   // Reaction Offset: Shift center point back by 2s to account for user reaction time.
   const REACTION_OFFSET = 2;
   const CENTER_POINT = Math.max(0, anchor.timestamp - REACTION_OFFSET);
 
-  let startTime = Math.max(0, CENTER_POINT - 10);
-  let endTime = CENTER_POINT + 10;
+  let startTime = Math.max(0, CENTER_POINT - bufferSeconds);
+  let endTime = CENTER_POINT + bufferSeconds;
 
   // Layer 2: Contextual (Sentence Alignment)
   // Only applicable if full transcript is available (Mock Mode)
@@ -80,8 +88,10 @@ export const processAnchorsToHotzones = async (
   audioFile?: File, // Optional: Real audio file for processing
   audioUrl?: string, // Optional: Remote URL
   _transcriptInfo?: { url: string; type: string }, // Optional: Official transcript (unused in MVP)
-  existingHotzones: Hotzone[] = [] // Optional: Existing hotzones to avoid reprocessing
+  existingHotzones: Hotzone[] = [], // Optional: Existing hotzones to avoid reprocessing
+  hotzoneRange: 'tight' | 'normal' | 'wide' = 'normal' // P6-3: 热区时间范围档位
 ): Promise<Hotzone[]> => {
+  const bufferSeconds = HOTZONE_RANGE_BUFFER[hotzoneRange] ?? 10;
 
   // 0. Filter out anchors that are already covered by existing finalized hotzones
   // AND Detect Extensions
@@ -234,8 +244,8 @@ export const processAnchorsToHotzones = async (
       return [];
   }
 
-  // 2. Generate New Mechanical Hotzones
-  const hotzones = newHotzonesToCreate.map((anchor) => generateHotzoneFromAnchor(anchor, transcript));
+  // 2. Generate New Mechanical Hotzones (P6-3: pass bufferSeconds)
+  const hotzones = newHotzonesToCreate.map((anchor) => generateHotzoneFromAnchor(anchor, transcript, bufferSeconds));
 
   // 3. Sort by start time
   hotzones.sort((a, b) => a.start_time - b.start_time);

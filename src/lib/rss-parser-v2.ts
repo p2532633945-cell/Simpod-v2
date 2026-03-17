@@ -3,10 +3,18 @@
  *
  * Enhanced RSS parser using fast-xml-parser for more robust XML handling
  * Supports standard RSS 2.0 and iTunes namespace extensions
+ * P6-4: Added podcast:transcript parsing (Podcast Namespace 2.0)
  */
 
 import { XMLParser } from 'fast-xml-parser'
 import { validateAudioUrl } from '@/lib/audio-validator'
+
+export interface OfficialTranscript {
+  url: string
+  type: 'application/srt' | 'text/vtt' | 'application/json' | 'text/html' | string
+  language?: string
+  rel?: string
+}
 
 export interface Episode {
   id: string
@@ -16,6 +24,7 @@ export interface Episode {
   audioUrl: string
   duration?: number
   artwork?: string
+  officialTranscript?: OfficialTranscript
 }
 
 export interface PodcastFromFeed {
@@ -38,6 +47,13 @@ interface RssChannel extends Record<string, unknown> {
   item?: RssItem | RssItem[]
 }
 
+interface PodcastTranscriptTag {
+  '@_url'?: string
+  '@_type'?: string
+  '@_language'?: string
+  '@_rel'?: string
+}
+
 interface RssItem extends Record<string, unknown> {
   title?: string
   description?: string
@@ -47,6 +63,8 @@ interface RssItem extends Record<string, unknown> {
   'itunes:image'?: { '@_href'?: string }
   'itunes:summary'?: string
   'content:encoded'?: string
+  // Podcast Namespace 2.0 official transcript tag
+  'podcast:transcript'?: PodcastTranscriptTag | PodcastTranscriptTag[]
 }
 
 /**
@@ -101,11 +119,13 @@ export async function parseFeed(feedUrl: string): Promise<{ episodes: Episode[];
   }
 
   // Step 2: Parse XML
+  // isArray forces podcast:transcript to always be an array for easier handling
   const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: '@_',
     parseTagValue: true,
     parseAttributeValue: true,
+    isArray: (tagName) => tagName === 'podcast:transcript',
   })
 
   let doc: Record<string, unknown>
@@ -166,6 +186,29 @@ export async function parseFeed(feedUrl: string): Promise<{ episodes: Episode[];
         ''
     )
 
+    // P6-4: Parse podcast:transcript tag (Podcast Namespace 2.0)
+    // Spec: https://podcastindex.org/namespace/1.0#transcript
+    let officialTranscript: OfficialTranscript | undefined
+    const transcriptTags = item['podcast:transcript']
+    if (transcriptTags) {
+      const tags: PodcastTranscriptTag[] = Array.isArray(transcriptTags)
+        ? transcriptTags
+        : [transcriptTags]
+      // Prefer machine-readable formats in this order
+      const PREFERRED_TYPES = ['application/srt', 'text/vtt', 'application/json', 'text/html']
+      const preferred =
+        tags.find((t) => PREFERRED_TYPES.includes((t['@_type'] || '').toLowerCase())) || tags[0]
+      if (preferred && preferred['@_url']) {
+        officialTranscript = {
+          url: preferred['@_url'],
+          type: preferred['@_type'] || 'unknown',
+          language: preferred['@_language'],
+          rel: preferred['@_rel'],
+        }
+        console.log('[RSS Parser v2] P6-4: Found official transcript:', officialTranscript)
+      }
+    }
+
     return {
       id: generateId(),
       title: getString(item.title) || '',
@@ -174,12 +217,15 @@ export async function parseFeed(feedUrl: string): Promise<{ episodes: Episode[];
       audioUrl: cleanedUrl,
       duration: duration ? parseDuration(duration) : undefined,
       artwork: itemImageUrl || podcast.artwork,
+      officialTranscript,
     }
   })
 
+  const episodesWithTranscript = episodes.filter((e) => e.officialTranscript)
   console.log('[RSS Parser v2] Parsed successfully:', {
     podcastTitle: podcast.title,
     episodeCount: episodes.length,
+    episodesWithOfficialTranscript: episodesWithTranscript.length,
     firstEpisodeAudioUrl: episodes[0]?.audioUrl,
   })
 

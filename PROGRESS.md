@@ -13,7 +13,7 @@
 
 ### 项目阶段
 - **当前阶段**: ⏳ Phase 5 - 核心功能完善 + PWA（进行中）
-- **下一步**: 执行 Phase 5 第二阶段（转录来源优化、智能热区档位、中途回溯开关、PWA）
+- **下一步**: Phase 5 第三阶段（集成测试、性能优化、Bug 修复）
 
 ### 市场目标
 - 积累早期试水用户（手机端 PWA）
@@ -24,7 +24,37 @@
 
 ## 进行中的任务
 
-### 当前任务：Phase 5 第一阶段 - 核心功能完善
+### 当前任务：Phase 5 第二阶段 - PWA + 护城河
+**状态**: ✅ 已完成
+**完成时间**: 2026-03-17
+**耗时**: ~2 小时
+
+**完成内容**：
+1. ✅ **P6-1**: PWA 手机端支持
+   - `public/manifest.json`（name、icons、shortcuts、theme）
+   - `public/sw.js` Service Worker（静态缓存 + network-first HTML）
+   - `next.config.mjs` 添加 SW/manifest 正确 HTTP headers
+   - `layout.tsx` iOS apple-touch-icon、apple-mobile-web-app-capable 等 meta
+   - SVG 图标自动生成（72/96/128/144/152/192/384/512px）
+
+2. ✅ **P6-2**: 中途回溯开关（Instant Replay Mode）
+   - `playerStore` 添加 `instantReplayMode` + `toggleInstantReplayMode`（localStorage 持久化）
+   - 播放器界面添加 Replay 开关按钮（带亮绿色激活状态）
+   - MARK 后若开启则自动 seek 到热区起点
+
+3. ✅ **P6-3**: 智能热区时间范围档位
+   - `playerStore` 添加 `hotzoneRange: 'tight' | 'normal' | 'wide'`（localStorage 持久化）
+   - 播放器界面添加 3 档按钮（3s / 10s / 20s）
+   - `hotzone.ts` `generateHotzoneFromAnchor` 支持 `bufferSeconds` 参数
+   - `processAnchorsToHotzones` 新增 `hotzoneRange` 参数
+
+4. ✅ **P6-4**: RSS 官方转录解析（Podcast Namespace 2.0）
+   - `rss-parser-v2.ts` 解析 `<podcast:transcript>` 标签
+   - 支持 SRT / VTT / JSON / HTML 格式优先级排序
+   - `Episode` 类型新增 `officialTranscript?: OfficialTranscript` 字段
+   - 统计并日志输出有官方转录的集数
+
+### 之前完成任务：Phase 5 第一阶段 - 核心功能完善
 **状态**: ✅ 已完成
 **完成时间**: 2026-03-17
 **耗时**: ~3 小时
@@ -135,9 +165,10 @@
 - [x] **P5-8**: 转录搜索 ✅
 
 #### Phase 5 第二阶段：PWA + 护城河（1 周）
-- [ ] **P5-9**: PWA 设计（2-3 day）
-- [ ] **P6-1**: 热区智能时间范围（1.5 day）
-- [ ] **P6-2**: 转录质量改进（1.5 day）
+- [x] **P5-9 / P6-1**: PWA 设计 ✅
+- [x] **P6-2**: 中途回溯开关 ✅
+- [x] **P6-3**: 智能热区时间范围档位（POC）✅
+- [x] **P6-4**: 转录来源优化（RSS 官方转录解析）✅
 
 #### Phase 5 第三阶段：系统稳定（1 周）
 - [ ] 集成测试（1 day）

@@ -10,7 +10,6 @@ import { useState, useCallback, useEffect } from "react"
 import Link from "next/link"
 import {
   Search,
-  Plus,
   Clock,
   Flame,
   ChevronRight,
@@ -20,13 +19,27 @@ import {
   LogIn,
   LogOut,
   User,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { mockProjects, formatDate } from "@/lib/mock-data"
+import { formatDate } from "@/lib/mock-data"
 import { searchPodcasts } from "@/lib/podcast-search"
 import { searchCache } from "@/lib/search-cache"
-import type { Project, Podcast as PodcastType } from "@/types/simpod"
+import type { Podcast as PodcastType } from "@/types/simpod"
 import { useAuthStore } from "@/stores/authStore"
+import { createClient } from "@/lib/supabase/client"
+
+// 从 hotzones 推断的最近播放记录
+interface RecentEpisode {
+  audioId: string
+  audioUrl: string
+  episodeTitle: string
+  podcastTitle: string
+  artwork?: string
+  hotzoneCount: number
+  pendingCount: number
+  lastAccessed: string
+}
 
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -36,12 +49,73 @@ export default function HomePage() {
   const [searchError, setSearchError] = useState<string | null>(null)
 
   const { user, signOut, initialize } = useAuthStore()
+  const [recentEpisodes, setRecentEpisodes] = useState<RecentEpisode[]>([])
+  const [recentLoading, setRecentLoading] = useState(false)
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined
     initialize().then((fn) => { unsubscribe = fn })
     return () => { unsubscribe?.() }
   }, [initialize])
+
+  // 从 Supabase hotzones 推断最近播放记录
+  useEffect(() => {
+    const loadRecent = async () => {
+      const supabase = createClient()
+      const { data: { user: currentUser } } = await supabase.auth.getUser()
+      if (!currentUser) return
+
+      setRecentLoading(true)
+      try {
+        const { data } = await supabase
+          .from('hotzones')
+          .select('audio_id, metadata, status, created_at')
+          .eq('user_id', currentUser.id)
+          .order('created_at', { ascending: false })
+          .limit(100)
+
+        if (!data || data.length === 0) return
+
+        // 按 audio_id 分组，取最近的
+        const grouped = new Map<string, { hotzones: typeof data; latest: string }>()
+        for (const hz of data) {
+          const existing = grouped.get(hz.audio_id)
+          if (!existing) {
+            grouped.set(hz.audio_id, { hotzones: [hz], latest: hz.created_at })
+          } else {
+            existing.hotzones.push(hz)
+            if (hz.created_at > existing.latest) existing.latest = hz.created_at
+          }
+        }
+
+        // 转为 RecentEpisode 列表，按最近时间排序，最多显示 6 个
+        const recent: RecentEpisode[] = Array.from(grouped.entries())
+          .sort((a, b) => b[1].latest.localeCompare(a[1].latest))
+          .slice(0, 6)
+          .map(([audioId, { hotzones: hzList, latest }]) => {
+            const meta = hzList[0]?.metadata || {}
+            const pendingCount = hzList.filter((h) => h.status === 'pending').length
+            return {
+              audioId,
+              audioUrl: (meta as Record<string, string>).audioUrl || '',
+              episodeTitle: (meta as Record<string, string>).episodeTitle || audioId,
+              podcastTitle: (meta as Record<string, string>).podcastTitle || 'Unknown Podcast',
+              artwork: (meta as Record<string, string>).artwork || undefined,
+              hotzoneCount: hzList.length,
+              pendingCount,
+              lastAccessed: latest,
+            }
+          })
+
+        setRecentEpisodes(recent)
+      } catch (err) {
+        console.error('[Home] Failed to load recent episodes:', err)
+      } finally {
+        setRecentLoading(false)
+      }
+    }
+    loadRecent()
+  }, [user])
 
   const handleSearch = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -287,22 +361,33 @@ export default function HomePage() {
             <div className="flex items-center gap-2">
               <Clock size={18} className="text-muted-foreground" />
               <h3 className="text-lg font-semibold text-foreground">
-                Recent Projects
+                Recently Played
               </h3>
             </div>
-
-            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-simpod-primary bg-simpod-mark/10 hover:bg-simpod-mark/20 transition-colors">
-              <Plus size={14} />
-              New Project
-            </button>
+            <Link
+              href="/hotzones"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-simpod-primary bg-simpod-mark/10 hover:bg-simpod-mark/20 transition-colors"
+            >
+              <Flame size={14} />
+              All Hotzones
+            </Link>
           </div>
 
-          {mockProjects.length === 0 ? (
+          {recentLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 size={20} className="animate-spin text-muted-foreground" />
+            </div>
+          ) : !user ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <p className="text-muted-foreground text-sm mb-3">Sign in to see your recent episodes</p>
+              <Link href="/auth" className="px-4 py-2 rounded-lg bg-simpod-mark text-simpod-dark text-sm font-medium">Sign In</Link>
+            </div>
+          ) : recentEpisodes.length === 0 ? (
             <EmptyState />
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {mockProjects.map((project) => (
-                <ProjectCard key={project.id} project={project} />
+              {recentEpisodes.map((ep) => (
+                <RecentEpisodeCard key={ep.audioId} episode={ep} />
               ))}
             </div>
           )}
@@ -368,12 +453,19 @@ function SearchResultCard({ podcast }: { podcast: PodcastType }) {
 }
 
 /**
- * ProjectCard - 项目卡片
+ * RecentEpisodeCard - 最近播放的节目卡片
  */
-function ProjectCard({ project }: { project: Project }) {
+function RecentEpisodeCard({ episode }: { episode: RecentEpisode }) {
+  const params = new URLSearchParams()
+  if (episode.audioUrl) params.set('audioUrl', episode.audioUrl)
+  if (episode.episodeTitle) params.set('episodeTitle', episode.episodeTitle)
+  if (episode.podcastTitle) params.set('podcastTitle', episode.podcastTitle)
+  if (episode.artwork) params.set('artwork', episode.artwork)
+  const workspaceUrl = `/workspace/${encodeURIComponent(episode.audioId)}?${params.toString()}`
+
   return (
     <Link
-      href={`/workspace/${project.episode.id}`}
+      href={workspaceUrl}
       className={cn(
         "group p-4 rounded-xl",
         "bg-card border border-border",
@@ -382,52 +474,43 @@ function ProjectCard({ project }: { project: Project }) {
       )}
     >
       <div className="flex items-start gap-3 mb-3">
-        <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0">
-          <Podcast size={20} className="text-muted-foreground" />
+        <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 overflow-hidden">
+          {episode.artwork ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={episode.artwork} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <Podcast size={20} className="text-muted-foreground" />
+          )}
         </div>
-
         <div className="flex-1 min-w-0">
           <h4 className="text-sm font-semibold text-foreground line-clamp-1 group-hover:text-simpod-primary transition-colors">
-            {project.episode.title}
+            {episode.episodeTitle}
           </h4>
           <p className="text-xs text-muted-foreground line-clamp-1">
-            {project.podcast.title}
+            {episode.podcastTitle}
           </p>
         </div>
-
-        <ChevronRight
-          size={16}
-          className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-        />
+        <ChevronRight size={16} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
       </div>
 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
             <Flame size={12} className="text-simpod-mark" />
-            <span className="text-xs text-muted-foreground">
-              {project.hotzoneCount} hotzones
-            </span>
+            <span className="text-xs text-muted-foreground">{episode.hotzoneCount} hotzones</span>
           </div>
-
-          {project.pendingCount > 0 && (
+          {episode.pendingCount > 0 && (
             <div className="flex items-center gap-1.5">
               <Clock size={12} className="text-amber-500" />
-              <span className="text-xs text-amber-500">
-                {project.pendingCount} pending
-              </span>
+              <span className="text-xs text-amber-500">{episode.pendingCount} pending</span>
             </div>
           )}
         </div>
-
-        <span className="text-[10px] text-muted-foreground">
-          {formatDate(project.lastAccessed)}
-        </span>
+        <span className="text-[10px] text-muted-foreground">{formatDate(episode.lastAccessed)}</span>
       </div>
     </Link>
   )
 }
-
 /**
  * EmptyState - 空状态
  */
@@ -437,18 +520,10 @@ function EmptyState() {
       <div className="w-20 h-20 rounded-2xl bg-secondary flex items-center justify-center mb-6">
         <Podcast size={32} className="text-muted-foreground" />
       </div>
-
-      <h4 className="text-lg font-semibold text-foreground mb-2">
-        No projects yet
-      </h4>
+      <h4 className="text-lg font-semibold text-foreground mb-2">No episodes yet</h4>
       <p className="text-sm text-muted-foreground max-w-sm mb-6">
-        Start by searching for podcasts above or paste a podcast URL.
+        Search for a podcast above and start listening. Your played episodes will appear here.
       </p>
-
-      <button className="flex items-center gap-2 px-4 py-2 rounded-xl bg-simpod-mark text-simpod-dark font-medium text-sm hover:opacity-90 transition-opacity">
-        <Plus size={16} />
-        Create First Project
-      </button>
     </div>
   )
 }

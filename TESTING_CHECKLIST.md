@@ -172,6 +172,103 @@
 
 ---
 
+---
+
+## 🆕 Phase 5 Part 2 新功能验收
+
+> 启动开发服务器：`npm run dev`，然后浏览器打开 `http://localhost:3000`
+
+---
+
+### P6-1：PWA 手机端支持
+
+**测试入口**：Chrome DevTools → Application → Manifest / Service Workers
+
+- [ ] **Manifest 加载**
+  - DevTools Application → Manifest 显示 Simpod 名称、图标、theme_color `#00cffd`
+  - 无 manifest 解析错误
+
+- [ ] **Service Worker 注册**
+  - DevTools Application → Service Workers 显示 `/sw.js` 已激活（status: activated）
+  - Console 显示 `[PWA] Service Worker registered: /`
+
+- [ ] **安装提示（Chrome 桌面）**
+  - 地址栏右侧出现安装图标（＋）
+  - 点击安装，弹出安装确认对话框
+
+- [ ] **离线页面缓存**
+  - DevTools Network → Offline 勾选
+  - 刷新 `/` 页面，仍能加载（Service Worker cache 响应）
+  - 重新上线后恢复正常
+
+- [ ] **iOS Safari meta tags**
+  - 页面源码包含 `apple-mobile-web-app-capable`
+  - 页面源码包含 `apple-touch-icon`
+
+---
+
+### P6-2：中途回溯开关（Instant Replay）
+
+**测试入口**：进入任意播放页面 `/workspace/[id]`，播放控制区下方
+
+- [ ] **开关显示**
+  - 播放器控制区下方出现 `Replay` 按钮（带 ↺ 图标）
+  - 默认为关闭状态（灰色边框）
+
+- [ ] **开启即时回溯**
+  - 点击 `Replay` 按钮，变为亮青色激活状态（带亮点指示）
+  - 状态持久化：刷新页面后仍保持开启
+
+- [ ] **MARK 后自动回溯**
+  - 开启 Replay 模式，播放音频到任意位置
+  - 点击 MARK 创建热区
+  - 热区生成完成后，音频自动跳回到该热区的起点时间
+  - 播放继续（不暂停）
+  - Console 显示 `[Player] Instant replay: seeking to hotzone start`
+
+- [ ] **关闭后恢复正常**
+  - 再次点击 `Replay` 关闭，MARK 后不再自动跳转
+
+---
+
+### P6-3：智能热区时间范围档位
+
+**测试入口**：进入任意播放页面 `/workspace/[id]`，播放控制区下方
+
+- [ ] **档位选择器显示**
+  - 播放器控制区下方左侧显示 `Range:` 标签和 3 个按钮：`3s` / `10s` / `20s`
+  - 默认激活 `10s`（亮青色背景）
+
+- [ ] **切换档位**
+  - 点击 `3s`，按钮变为激活状态，其余变灰
+  - 状态持久化：刷新页面后档位保持
+
+- [ ] **档位影响热区大小**
+  - 切换到 `3s`，MARK 一个热区 → 热区时间范围约为 6s（±3s）
+  - 切换到 `10s`，MARK 一个热区 → 热区时间范围约为 20s（±10s）
+  - 切换到 `20s`，MARK 一个热区 → 热区时间范围约为 40s（±20s）
+  - 波形图上热区宽度对应变化
+
+- [ ] **旧热区不受影响**
+  - 切换档位后，已创建的热区时间范围不变
+
+---
+
+### P6-4：RSS 官方转录解析
+
+**测试入口**：搜索支持 Podcast Namespace 2.0 的播客（如 NPR、Podcast Index 上的节目）
+
+- [ ] **解析日志**
+  - 进入有官方转录的播客剧集列表页
+  - Console 显示 `[RSS Parser v2] P6-4: Found official transcript: { url, type, language }`
+  - Console 显示 `episodesWithOfficialTranscript: N`（N > 0）
+
+- [ ] **无官方转录的普通播客**
+  - 搜索普通播客，Console 显示 `episodesWithOfficialTranscript: 0`
+  - 播放和 MARK 功能正常（不受影响）
+
+---
+
 ## 📋 原有功能回归测试（确保没有破坏）
 
 - [ ] 搜索播客（首页）正常
