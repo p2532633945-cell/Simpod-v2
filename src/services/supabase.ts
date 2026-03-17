@@ -115,27 +115,39 @@ export const fetchAllHotzones = async (): Promise<Hotzone[]> => {
     const { data: { user } } = await supabase.auth.getUser();
     console.log('[Supabase] DIAG: fetchAllHotzones - user_id:', user?.id);
     
-    let query = supabase
-      .from('hotzones')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (user) {
-      query = query.eq('user_id', user.id);
-      console.log('[Supabase] DIAG: Added user_id filter to fetchAllHotzones query');
-    } else {
-      console.log('[Supabase] DIAG: No user logged in, returning empty hotzones from fetchAllHotzones');
-      return [];
-    }
-    const { data, error } = await query;
+    // Phase 5 优化：使用缓存避免重复查询
+    const cacheKey = `hotzones:all:${user?.id}`;
+    const { cachedQuery } = await import('@/lib/query-cache');
+    
+    const data = await cachedQuery(
+      cacheKey,
+      async () => {
+        let query = supabase
+          .from('hotzones')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (user) {
+          query = query.eq('user_id', user.id);
+          console.log('[Supabase] DIAG: Added user_id filter to fetchAllHotzones query');
+        } else {
+          console.log('[Supabase] DIAG: No user logged in, returning empty hotzones from fetchAllHotzones');
+          return [];
+        }
+        const { data: result, error } = await query;
 
-    if (error) {
-      const errorInfo = {
-        message: String(error.message || 'Unknown error'),
-        code: String(error.code || 'UNKNOWN'),
-      };
-      console.error('[Supabase] Error fetching all hotzones:', errorInfo);
-      throw new Error(errorInfo.message);
-    }
+        if (error) {
+          const errorInfo = {
+            message: String(error.message || 'Unknown error'),
+            code: String(error.code || 'UNKNOWN'),
+          };
+          console.error('[Supabase] Error fetching all hotzones:', errorInfo);
+          throw new Error(errorInfo.message);
+        }
+
+        return result || [];
+      },
+      5 * 60 * 1000 // 5 分钟缓存
+    );
 
     console.log('[Supabase] DIAG: fetchAllHotzones result count:', data?.length);
 
@@ -186,33 +198,45 @@ export const fetchHotzones = async (audioId: string): Promise<Hotzone[]> => {
     const { data: { user } } = await supabase.auth.getUser();
     console.log('[Supabase] DIAG: fetchHotzones - user_id:', user?.id, 'audio_id:', audioId);
     
-    let query = supabase
-      .from('hotzones')
-      .select('*')
-      .eq('audio_id', audioId)
-      .order('start_time', { ascending: true });
-    if (user) {
-      query = query.eq('user_id', user.id);
-      console.log('[Supabase] DIAG: Added user_id filter to query');
-    } else {
-      console.log('[Supabase] DIAG: No user logged in, returning empty hotzones');
-      return [];
-    }
+    // Phase 5 优化：使用缓存避免重复查询
+    const cacheKey = `hotzones:${user?.id}:${audioId}`;
+    const { cachedQuery } = await import('@/lib/query-cache');
     
-    const { data, error } = await query;
+    const data = await cachedQuery(
+      cacheKey,
+      async () => {
+        let query = supabase
+          .from('hotzones')
+          .select('*')
+          .eq('audio_id', audioId)
+          .order('start_time', { ascending: true });
+        if (user) {
+          query = query.eq('user_id', user.id);
+          console.log('[Supabase] DIAG: Added user_id filter to query');
+        } else {
+          console.log('[Supabase] DIAG: No user logged in, returning empty hotzones');
+          return [];
+        }
+        
+        const { data: result, error } = await query;
 
-    if (error) {
-      // Extract error info early to avoid serialization issues
-      const errorInfo = {
-        message: String(error.message || 'Unknown error'),
-        code: String(error.code || 'UNKNOWN'),
-        details: String(error.details || 'No details'),
-        hint: String(error.hint || 'No hint'),
-        audioId
-      };
-      console.error('[Supabase] Error fetching hotzones:', errorInfo);
-      throw new Error(errorInfo.message);
-    }
+        if (error) {
+          // Extract error info early to avoid serialization issues
+          const errorInfo = {
+            message: String(error.message || 'Unknown error'),
+            code: String(error.code || 'UNKNOWN'),
+            details: String(error.details || 'No details'),
+            hint: String(error.hint || 'No hint'),
+            audioId
+          };
+          console.error('[Supabase] Error fetching hotzones:', errorInfo);
+          throw new Error(errorInfo.message);
+        }
+
+        return result || [];
+      },
+      5 * 60 * 1000 // 5 分钟缓存
+    );
 
     console.log('[Supabase] DIAG: Query result count:', data?.length);
     console.log('[Supabase] DIAG: Raw hotzones data:', data?.map((hz: any) => ({

@@ -31,15 +31,18 @@ import { saveHotzone, fetchHotzones } from "@/services/supabase"
 interface PodcastPlayerPageProps {
   audioId: string
   audioUrl?: string
+  startTime?: number
+  autoPlay?: boolean
 }
 
-export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps) {
+export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay }: PodcastPlayerPageProps) {
   // ============================================
   // 加载状态
   // ============================================
   const [isMarking, setIsMarking] = useState(false)
   const [audioLoading, setAudioLoading] = useState(true)
   const [audioError, setAudioError] = useState<string | null>(null)
+  const [hasAutoPlayed, setHasAutoPlayed] = useState(false)
 
   // ============================================
   // Zustand Store 状态管理
@@ -318,6 +321,24 @@ export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps)
       }
     }
   }, [audioId, addHotzone])
+
+  // Phase 5 优化：自动跳转到指定时间并播放（从复盘页面跳转时）
+  useEffect(() => {
+    if (startTime !== undefined && audioRef.current && !hasAutoPlayed && audioRef.current.readyState >= 2) {
+      console.log('[Player] Phase 5: Auto-jumping to startTime:', startTime)
+      audioRef.current.currentTime = startTime
+      
+      if (autoPlay) {
+        console.log('[Player] Phase 5: Auto-playing from startTime')
+        audioRef.current.play().catch((err) => {
+          console.error('[Player] Failed to auto-play:', err)
+        })
+        setIsPlaying(true)
+      }
+      
+      setHasAutoPlayed(true)
+    }
+  }, [startTime, autoPlay, hasAutoPlayed, setIsPlaying])
 
   // 获取当前热区的转录词
   const currentTranscriptWords: Word[] = useMemo(() => {
