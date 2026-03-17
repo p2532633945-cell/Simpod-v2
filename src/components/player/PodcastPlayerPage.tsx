@@ -394,17 +394,11 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
     }
   }, [])
 
-  // onPlayPause(): void - 使用 store 的 setIsPlaying 而非直接操作 audio
+  // onPlayPause(): void - 通过 store 的 setIsPlaying 统一控制
   const handlePlayPause = useCallback(() => {
-    const audio = audioRef.current
-    if (!audio) return
-
-    if (audio.paused) {
-      setIsPlaying(true)
-    } else {
-      setIsPlaying(false)
-    }
-  }, [setIsPlaying])
+    const { isPlaying: currentPlaying, setIsPlaying: storeSetIsPlaying } = usePlayerStore.getState()
+    storeSetIsPlaying(!currentPlaying)
+  }, [])
 
   // onRateChange(rate: number): void
   const handleRateChange = useCallback((rate: number) => {
@@ -635,80 +629,73 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
               isPlaying={isPlaying}
             />
 
-            {/* Controls */}
-            <div className="mt-4 flex flex-col gap-3">
-              {/* Playback controls row */}
-              <div className="flex-1">
-                <PlaybackControls
-                  playerState={playerState}
-                  onSeek={handleSeek}
-                  onPlayPause={handlePlayPause}
-                  onRateChange={handleRateChange}
-                />
-              </div>
+            {/* Controls + MARK — clean bottom-oriented layout */}
+            <div className="mt-4">
+              <PlaybackControls
+                playerState={playerState}
+                onSeek={handleSeek}
+                onPlayPause={handlePlayPause}
+                onRateChange={handleRateChange}
+              />
 
-              {/* MARK button row — full width on mobile */}
-              <div className="flex items-center justify-center">
-                {isMarking ? (
-                  <button
-                    disabled
-                    className="px-6 py-3 rounded-full font-semibold text-sm flex items-center gap-2 bg-muted text-muted-foreground"
-                  >
-                    <Loader2 size={16} className="animate-spin" />
-                    Marking...
-                  </button>
-                ) : (
-                  <MarkButtonCompact
-                    currentTime={currentTime}
-                    onMark={handleMark}
-                    disabled={audioLoading || isMarking || !!audioError}
-                  />
-                )}
-              </div>
-            </div>
-
-            {/* P6-3 + P6-2: 热区档位选择器 + 即时回溯开关 */}
-            <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
-              {/* P6-3: 热区时间范围档位 */}
-              <div className="flex items-center gap-1.5">
-                <Gauge size={13} className="text-muted-foreground shrink-0" />
-                <span className="text-xs text-muted-foreground hidden sm:inline">Range:</span>
-                <div className="flex rounded-lg overflow-hidden border border-border">
-                  {([
-                    { key: 'tight', label: '3s', title: 'Tight — ±3s' },
-                    { key: 'normal', label: '10s', title: 'Normal — ±10s' },
-                    { key: 'wide', label: '20s', title: 'Wide — ±20s' },
-                  ] as const).map(({ key, label, title }) => (
-                    <button
-                      key={key}
-                      onClick={() => setHotzoneRange(key)}
-                      title={title}
-                      className={`px-2 py-1 text-xs font-mono transition-colors ${
-                        hotzoneRange === key
-                          ? 'bg-simpod-mark text-simpod-dark font-semibold'
-                          : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-secondary'
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
+              {/* MARK + Range + Replay in one row */}
+              <div className="mt-4 flex items-center justify-between gap-2">
+                {/* Range selector */}
+                <div className="flex items-center gap-1.5">
+                  <Gauge size={13} className="text-muted-foreground shrink-0" />
+                  <div className="flex rounded-lg overflow-hidden border border-border">
+                    {([
+                      { key: 'tight', label: '3s', title: '±3s' },
+                      { key: 'normal', label: '10s', title: '±10s' },
+                      { key: 'wide', label: '20s', title: '±20s' },
+                    ] as const).map(({ key, label, title }) => (
+                      <button
+                        key={key}
+                        onClick={() => setHotzoneRange(key)}
+                        title={title}
+                        className={`px-2.5 py-1.5 text-xs font-mono transition-colors ${
+                          hotzoneRange === key
+                            ? 'bg-simpod-mark text-simpod-dark font-semibold'
+                            : 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-secondary'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* P6-2: 即时回溯开关 */}
-              <button
-                onClick={toggleInstantReplayMode}
-                title={instantReplayMode ? 'Instant Replay ON' : 'Instant Replay OFF'}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors border ${
-                  instantReplayMode
-                    ? 'bg-simpod-mark/15 border-simpod-mark/50 text-simpod-mark'
-                    : 'bg-transparent border-border text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <RotateCcw size={11} className={instantReplayMode ? 'animate-spin-slow' : ''} />
-                <span className="hidden sm:inline">Replay</span>
-                {instantReplayMode && <span className="w-1.5 h-1.5 rounded-full bg-simpod-mark" />}
-              </button>
+                {/* MARK — centred, prominent */}
+                <div className="flex-1 flex justify-center">
+                  {isMarking ? (
+                    <button disabled className="px-5 py-2.5 rounded-full text-sm flex items-center gap-2 bg-muted text-muted-foreground">
+                      <Loader2 size={15} className="animate-spin" />
+                      Marking...
+                    </button>
+                  ) : (
+                    <MarkButtonCompact
+                      currentTime={currentTime}
+                      onMark={handleMark}
+                      disabled={audioLoading || isMarking || !!audioError}
+                    />
+                  )}
+                </div>
+
+                {/* Replay toggle */}
+                <button
+                  onClick={toggleInstantReplayMode}
+                  title={instantReplayMode ? 'Instant Replay ON' : 'Instant Replay OFF'}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                    instantReplayMode
+                      ? 'bg-simpod-mark/15 border-simpod-mark/50 text-simpod-mark'
+                      : 'bg-transparent border-border text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <RotateCcw size={12} className={instantReplayMode ? 'animate-spin-slow' : ''} />
+                  <span className="hidden sm:inline">Replay</span>
+                  {instantReplayMode && <span className="w-1.5 h-1.5 rounded-full bg-simpod-mark" />}
+                </button>
+              </div>
             </div>
 
             {/* Audio Loading Indicator */}

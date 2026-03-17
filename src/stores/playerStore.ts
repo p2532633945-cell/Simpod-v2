@@ -159,7 +159,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   })),
 
   // Audio ref
-  setAudioRef: (ref) => set({ audioRef: ref }),
+  setAudioRef: (ref) => {
+    const { audioRef: oldRef } = get()
+    // 替换前先暂停旧的 audio 元素，防止双声道
+    if (oldRef && oldRef !== ref) {
+      console.log('[PlayerStore] Replacing audioRef — pausing old audio element')
+      oldRef.pause()
+    }
+    set({ audioRef: ref })
+  },
 
   // P6-3: 热区时间范围档位
   setHotzoneRange: (range) => {

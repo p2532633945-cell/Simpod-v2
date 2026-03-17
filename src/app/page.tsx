@@ -243,16 +243,17 @@ export default function HomePage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-8">
-        {/* Hero Section */}
-        <section className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4 text-balance">
-            Start Your Listening Session
-          </h2>
-          <p className="text-muted-foreground text-lg max-w-xl mx-auto text-pretty">
-            Paste a podcast URL or search for your favorite shows. Mark the
-            moments you want to review later.
-          </p>
-        </section>
+        {/* Hero Section — hide when search results shown */}
+        {searchResults.length === 0 && !searchError && (
+          <section className="text-center mb-10">
+            <h2 className="text-2xl md:text-4xl font-bold text-foreground mb-3 text-balance">
+              Start Your Listening Session
+            </h2>
+            <p className="text-muted-foreground md:text-lg max-w-xl mx-auto text-pretty">
+              Search for podcasts. Mark the moments you want to review later.
+            </p>
+          </section>
+        )}
 
         {/* Search Input */}
         <section className="mb-12">
