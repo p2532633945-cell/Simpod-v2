@@ -26,8 +26,9 @@ import {
 import { cn } from "@/lib/utils"
 import { formatDate } from "@/lib/mock-data"; import { formatTime } from "@/lib/time"
 import type { Hotzone, HotzoneFilter } from "@/types/simpod"
-import { fetchAllHotzones, updateHotzoneStatus } from "@/services/supabase"
+import { fetchAllHotzones, updateHotzoneStatus, updateHotzoneTranscript } from "@/services/supabase"
 import { AnalyticsDashboard } from "@/components/hotzones/AnalyticsDashboard"
+import { TranscriptEditor } from "@/components/transcript/TranscriptEditor"
 
 const FILTER_OPTIONS: { value: HotzoneFilter; label: string; icon: React.ReactNode }[] = [
   { value: "all", label: "All", icon: <Filter size={14} /> },
@@ -158,6 +159,16 @@ export default function HotzonesPage() {
     setSelectedIds(new Set())
   }, [selectedIds])
 
+  // P5-7: 保存转录编辑
+  const handleTranscriptSave = useCallback(async (hotzoneId: string, newText: string, note: string) => {
+    await updateHotzoneTranscript(hotzoneId, newText, note)
+    setHotzones(prev => prev.map(hz =>
+      hz.id === hotzoneId
+        ? { ...hz, transcript_snippet: newText, metadata: { ...hz.metadata, description: note } }
+        : hz
+    ))
+  }, [])
+
   const isAllSelected = filteredHotzones.length > 0 && selectedIds.size === filteredHotzones.length
 
   return (
@@ -263,6 +274,7 @@ export default function HotzonesPage() {
                       onSelect={() => handleSelect(hotzone.id)}
                       onJump={() => handleHotzoneJump(hotzone.id, hotzone.start_time)}
                       onStatusChange={(status: 'pending' | 'reviewed' | 'archived') => handleToggleStatus(hotzone.id, status)}
+                      onTranscriptSave={handleTranscriptSave}
                     />
                   ))}
                 </div>
@@ -295,13 +307,14 @@ export default function HotzonesPage() {
   )
 }
 
-function HotzoneCard({ hotzone, isSelected, isUpdating, onSelect, onJump, onStatusChange }: {
+function HotzoneCard({ hotzone, isSelected, isUpdating, onSelect, onJump, onStatusChange, onTranscriptSave }: {
   hotzone: Hotzone
   isSelected: boolean
   isUpdating: boolean
   onSelect: () => void
   onJump: () => void
   onStatusChange: (status: 'pending' | 'reviewed' | 'archived') => void
+  onTranscriptSave: (hotzoneId: string, text: string, note: string) => Promise<void>
 }) {
   const statusConfig: Record<'pending' | 'reviewed' | 'archived', { color: string; bg: string; label: string; next: 'pending' | 'reviewed' | 'archived' }> = {
     pending:  { color: "text-amber-500",        bg: "bg-amber-500/10",  label: "Pending",  next: "reviewed" },
@@ -335,11 +348,14 @@ function HotzoneCard({ hotzone, isSelected, isUpdating, onSelect, onJump, onStat
               <span>{cfg.label}</span>
             </button>
           </div>
-          {hotzone.transcript_snippet && (
-            <p className="text-sm text-muted-foreground line-clamp-3 mb-3 leading-relaxed">
-              {hotzone.transcript_snippet}
-            </p>
-          )}
+
+          {/* P5-7: 转录编辑器 */}
+          <TranscriptEditor
+            hotzone={hotzone}
+            onSave={onTranscriptSave}
+            className="mb-3"
+          />
+
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className={cn("text-xs px-1.5 py-0.5 rounded",

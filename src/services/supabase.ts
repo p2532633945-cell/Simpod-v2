@@ -251,6 +251,53 @@ export const updateHotzone = async (hotzone: Hotzone): Promise<Hotzone> => {
 };
 
 /**
+ * 更新热区转录文本（P5-7）
+ *
+ * 允许用户编辑转录文本和添加注释
+ */
+export const updateHotzoneTranscript = async (
+  hotzoneId: string,
+  transcriptText: string,
+  note: string
+): Promise<void> => {
+  const supabase = createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('User not authenticated');
+
+  const { data: existing, error: fetchError } = await supabase
+    .from('hotzones')
+    .select('metadata')
+    .eq('id', hotzoneId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (fetchError || !existing) throw new Error('Hotzone not found or unauthorized');
+
+  const updatedMetadata = {
+    ...(existing.metadata as object || {}),
+    description: note,
+    transcript_edited: true,
+    transcript_edited_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase
+    .from('hotzones')
+    .update({
+      transcript_snippet: transcriptText,
+      metadata: updatedMetadata,
+    })
+    .eq('id', hotzoneId)
+    .eq('user_id', user.id);
+
+  if (error) {
+    console.error('[Supabase] Error updating transcript:', { message: error.message, hotzoneId });
+    throw new Error(error.message);
+  }
+  console.log('[Supabase] Transcript updated for hotzone:', hotzoneId);
+};
+
+/**
  * 删除热区（P5-4）
  * 
  * 用户数据隔离 - 确保只能删除自己的热区
