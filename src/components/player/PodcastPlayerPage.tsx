@@ -41,8 +41,6 @@ export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps)
   const [audioLoading, setAudioLoading] = useState(true)
   const [audioError, setAudioError] = useState<string | null>(null)
 
-  console.log('[PodcastPlayerPage] Rendering with audioUrl:', audioUrl)
-
   // ============================================
   // Zustand Store 状态管理
   // ============================================
@@ -258,10 +256,33 @@ export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps)
   useEffect(() => {
     const loadHotzones = async () => {
       try {
-        console.log("[Player] Loading hotzones for audioId:", audioId)
+        console.log("[Player] DIAG: audioId changed to:", audioId)
+        
+        // 重置播放器状态和热区
+        const { setHotzones: setHotzonesDirect, setCurrentTime: setCurrentTimeDirect, setIsPlaying: setIsPlayingDirect } = usePlayerStore.getState()
+        setHotzonesDirect([])
+        setCurrentTimeDirect(0)
+        setIsPlayingDirect(false)
+        console.log("[Player] DIAG: Reset player state - hotzones cleared, currentTime=0, isPlaying=false")
+        
+        // 同时重置 audio 元素
+        if (audioRef.current) {
+          audioRef.current.currentTime = 0
+          audioRef.current.pause()
+          console.log('[Player] DIAG: Audio element reset:', { currentTime: 0, paused: true })
+        }
+        
         const fetchedHotzones = await fetchHotzones(audioId)
-        console.log("[Player] Loaded hotzones:", fetchedHotzones.length)
+        console.log("[Player] DIAG: Fetched hotzones:", fetchedHotzones.map(hz => ({ 
+          id: hz.id, 
+          audio_id: hz.audio_id, 
+          user_id: hz.metadata?.user_id,
+          start: hz.start_time,
+          end: hz.end_time
+        })))
+        
         fetchedHotzones.forEach(hz => addHotzone(hz))
+        console.log("[Player] DIAG: Added all hotzones to store, total count:", fetchedHotzones.length)
       } catch (err) {
         const error = err as Error
         const errorInfo = {
@@ -284,7 +305,16 @@ export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps)
     // 清理：当组件卸载或 audioId 变化时，清理状态
     return () => {
       if (audioId) {
-        console.log("[Player] Cleaning up for audioId:", audioId)
+        console.log("[Player] DIAG: Cleanup for audioId:", audioId)
+        // 重置播放器状态
+        if (audioRef.current) {
+          audioRef.current.currentTime = 0
+          audioRef.current.pause()
+        }
+        const { setHotzones: setHotzonesDirect, setCurrentTime: setCurrentTimeDirect, setIsPlaying: setIsPlayingDirect } = usePlayerStore.getState()
+        setHotzonesDirect([])
+        setCurrentTimeDirect(0)
+        setIsPlayingDirect(false)
       }
     }
   }, [audioId, addHotzone])
@@ -370,7 +400,7 @@ export function PodcastPlayerPage({ audioId, audioUrl }: PodcastPlayerPageProps)
 
       if (newHotzone) {
         console.log("[Player] Saving hotzone:", newHotzone.id)
-        await saveHotzone(newHotzone)
+        await saveHotzone(newHotzone, audioUrl)
         addHotzone(newHotzone)
         setSelectedHotzoneId(newHotzone.id)
         console.log("[Player] Hotzone created successfully")

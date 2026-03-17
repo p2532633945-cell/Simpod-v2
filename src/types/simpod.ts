@@ -41,6 +41,7 @@ export interface Anchor {
 export interface HotzoneMetadata {
   confidence?: number
   difficulty_score?: number
+  user_id?: string
   user_adjustment_history?: Array<{
     action: string
     timestamp: string

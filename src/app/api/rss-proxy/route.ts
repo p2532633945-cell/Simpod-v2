@@ -41,7 +41,7 @@ interface ProxyResponse {
 
 // 简单的内存缓存（生产环境应使用 Redis）
 const feedCache = new Map<string, { data: string; timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 分钟
+const CACHE_TTL = 10 * 60 * 1000; // 10 分钟（P4-5 性能优化）
 
 async function fetchWithTimeout(
   url: string,

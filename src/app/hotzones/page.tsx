@@ -42,6 +42,8 @@ export default function HotzonesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updatingIds, setUpdatingIds] = useState<Set<string>>(new Set())
+  const [currentPage, setCurrentPage] = useState(1)
+  const ITEMS_PER_PAGE = 20 // P4-5 性能优化：分页加载
 
   // 加载真实热区数据
   const loadHotzones = useCallback(async () => {
@@ -85,6 +87,15 @@ export default function HotzonesPage() {
     return result
   }, [hotzones, filter, searchQuery])
 
+  // P4-5 性能优化：分页显示
+  const paginatedHotzones = useMemo(() => {
+    const startIdx = (currentPage - 1) * ITEMS_PER_PAGE
+    const endIdx = startIdx + ITEMS_PER_PAGE
+    return filteredHotzones.slice(startIdx, endIdx)
+  }, [filteredHotzones, currentPage, ITEMS_PER_PAGE])
+
+  const totalPages = Math.ceil(filteredHotzones.length / ITEMS_PER_PAGE)
+
   // 统计数量
   const counts = useMemo(() => ({
     all: hotzones.length,
@@ -97,7 +108,15 @@ export default function HotzonesPage() {
   const handleHotzoneJump = useCallback((hotzoneId: string, startTime: number) => {
     const hotzone = hotzones.find((hz) => hz.id === hotzoneId)
     if (hotzone) {
-      window.location.href = `/workspace/${hotzone.audio_id}?t=${startTime}`
+      // P4-5 性能优化：从 metadata 中获取 audioUrl
+      const audioUrl = (hotzone.metadata as any)?.audioUrl
+      const urlParams = new URLSearchParams()
+      urlParams.set('t', startTime.toString())
+      if (audioUrl) {
+        urlParams.set('audioUrl', audioUrl)
+      }
+      window.location.href = `/workspace/${hotzone.audio_id}?${urlParams.toString()}`
+      console.log('[HotzonesPage] Jumping to hotzone:', { hotzoneId, audioUrl, startTime })
     }
   }, [hotzones])
 
@@ -215,17 +234,39 @@ export default function HotzonesPage() {
             {filteredHotzones.length === 0 ? (
               <EmptyState filter={filter} />
             ) : (
-              <div className="grid gap-4 md:grid-cols-2">
-                {filteredHotzones.map((hotzone) => (
-                  <HotzoneCard key={hotzone.id} hotzone={hotzone}
-                    isSelected={selectedIds.has(hotzone.id)}
-                    isUpdating={updatingIds.has(hotzone.id)}
-                    onSelect={() => handleSelect(hotzone.id)}
-                    onJump={() => handleHotzoneJump(hotzone.id, hotzone.start_time)}
-                    onStatusChange={(status: 'pending' | 'reviewed' | 'archived') => handleToggleStatus(hotzone.id, status)}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {paginatedHotzones.map((hotzone) => (
+                    <HotzoneCard key={hotzone.id} hotzone={hotzone}
+                      isSelected={selectedIds.has(hotzone.id)}
+                      isUpdating={updatingIds.has(hotzone.id)}
+                      onSelect={() => handleSelect(hotzone.id)}
+                      onJump={() => handleHotzoneJump(hotzone.id, hotzone.start_time)}
+                      onStatusChange={(status: 'pending' | 'reviewed' | 'archived') => handleToggleStatus(hotzone.id, status)}
+                    />
+                  ))}
+                </div>
+                {totalPages > 1 && (
+                  <div className="mt-8 flex items-center justify-center gap-2">
+                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
+                      className="px-3 py-2 rounded-lg text-sm bg-secondary text-foreground hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed">
+                      Previous
+                    </button>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                        <button key={page} onClick={() => setCurrentPage(page)}
+                          className={cn("w-8 h-8 rounded text-sm", currentPage === page ? "bg-simpod-mark/10 text-simpod-primary font-medium" : "bg-secondary text-muted-foreground hover:bg-secondary/80")}>
+                          {page}
+                        </button>
+                      ))}
+                    </div>
+                    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
+                      className="px-3 py-2 rounded-lg text-sm bg-secondary text-foreground hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed">
+                      Next
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}

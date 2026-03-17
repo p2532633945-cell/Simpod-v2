@@ -13,7 +13,7 @@ import { Hotzone, Anchor, TranscriptSegment } from '@/types';
  * 注意：将 transcript_words 从顶层移动到 metadata.transcript_words
  * 以兼容数据库schema
  */
-export const saveHotzone = async (hotzone: Hotzone) => {
+export const saveHotzone = async (hotzone: Hotzone, audioUrl?: string) => {
   const supabase = createClient();
 
   // Create a copy to avoid mutating original object used in UI
@@ -36,6 +36,15 @@ export const saveHotzone = async (hotzone: Hotzone) => {
       transcript_words: payload.transcript_words
     };
     delete dbPayload.transcript_words;
+  }
+
+  // P4-5 性能优化：保存 audioUrl 到 metadata 以便从复盘页面跳转时使用
+  if (audioUrl) {
+    dbPayload.metadata = {
+      ...(dbPayload.metadata as object),
+      audioUrl: audioUrl
+    };
+    console.log('[Supabase] Saving audioUrl to metadata for playback');
   }
 
   try {
@@ -104,12 +113,18 @@ export const fetchAllHotzones = async (): Promise<Hotzone[]> => {
   try {
     // P1-4: 只获取当前用户的热区
     const { data: { user } } = await supabase.auth.getUser();
+    console.log('[Supabase] DIAG: fetchAllHotzones - user_id:', user?.id);
+    
     let query = supabase
       .from('hotzones')
       .select('*')
       .order('created_at', { ascending: false });
     if (user) {
       query = query.eq('user_id', user.id);
+      console.log('[Supabase] DIAG: Added user_id filter to fetchAllHotzones query');
+    } else {
+      console.log('[Supabase] DIAG: No user logged in, returning empty hotzones from fetchAllHotzones');
+      return [];
     }
     const { data, error } = await query;
 
@@ -121,6 +136,8 @@ export const fetchAllHotzones = async (): Promise<Hotzone[]> => {
       console.error('[Supabase] Error fetching all hotzones:', errorInfo);
       throw new Error(errorInfo.message);
     }
+
+    console.log('[Supabase] DIAG: fetchAllHotzones result count:', data?.length);
 
     return (data as any[]).map(hz => {
       if (hz.metadata && hz.metadata.transcript_words) {
@@ -167,6 +184,8 @@ export const fetchHotzones = async (audioId: string): Promise<Hotzone[]> => {
   try {
     // P1-4: 只获取当前用户的热区
     const { data: { user } } = await supabase.auth.getUser();
+    console.log('[Supabase] DIAG: fetchHotzones - user_id:', user?.id, 'audio_id:', audioId);
+    
     let query = supabase
       .from('hotzones')
       .select('*')
@@ -174,7 +193,12 @@ export const fetchHotzones = async (audioId: string): Promise<Hotzone[]> => {
       .order('start_time', { ascending: true });
     if (user) {
       query = query.eq('user_id', user.id);
+      console.log('[Supabase] DIAG: Added user_id filter to query');
+    } else {
+      console.log('[Supabase] DIAG: No user logged in, returning empty hotzones');
+      return [];
     }
+    
     const { data, error } = await query;
 
     if (error) {
@@ -190,8 +214,17 @@ export const fetchHotzones = async (audioId: string): Promise<Hotzone[]> => {
       throw new Error(errorInfo.message);
     }
 
+    console.log('[Supabase] DIAG: Query result count:', data?.length);
+    console.log('[Supabase] DIAG: Raw hotzones data:', data?.map((hz: any) => ({
+      id: hz.id,
+      audio_id: hz.audio_id,
+      user_id: hz.user_id,
+      start_time: hz.start_time,
+      end_time: hz.end_time
+    })));
+
     // Transform back for UI: pull transcript_words from metadata to top-level
-    return (data as any[]).map(hz => {
+    const transformed = (data as any[]).map(hz => {
         if (hz.metadata && hz.metadata.transcript_words) {
             return {
                 ...hz,
@@ -200,6 +233,9 @@ export const fetchHotzones = async (audioId: string): Promise<Hotzone[]> => {
         }
         return hz;
     }) as Hotzone[];
+    
+    console.log('[Supabase] DIAG: Transformed hotzones for UI:', transformed.length);
+    return transformed;
   } catch (err) {
     // Catch all errors, including network errors
     const message = err instanceof Error ? err.message : 'Unknown error';
