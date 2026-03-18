@@ -48,3 +48,4 @@ example-*/
 # Temporary files
 tmp/
 temp/
+.vercel

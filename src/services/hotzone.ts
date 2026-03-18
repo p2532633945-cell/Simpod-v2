@@ -290,7 +290,7 @@ export const processAnchorsToHotzones = async (
 
       let text = hz.transcript_snippet;
       let words: Array<{ word: string; start: number; end: number }> | undefined = undefined;
-      let transcriptSource: 'official' | 'groq' | 'user' = 'groq';
+      const transcriptSource: 'official' | 'groq' | 'user' = 'groq';
       let transcriptConfidence: number = 100;
 
       if (!text || text === "Processing...") {
