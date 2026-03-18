@@ -23,7 +23,7 @@ import { usePlayerStore } from "@/stores/playerStore"
 import type { HotzoneRange } from "@/stores/playerStore"
 
 // 类型
-import type { Word, Anchor } from "@/types/simpod"
+import type { Word, Anchor, Hotzone } from "@/types/simpod"
 
 // 服务
 import { processAnchorsToHotzones } from "@/services/hotzone"
@@ -624,22 +624,21 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
     const REACTION_OFFSET = 2
     const centerPoint = Math.max(0, timestamp - REACTION_OFFSET)
     const optimisticId = `optimistic_${Math.random().toString(36).substring(2, 11)}`
-    const optimisticHotzone = {
+    const optimisticHotzone: Hotzone = {
       id: optimisticId,
       audio_id: audioId,
       start_time: Math.max(0, centerPoint - bufferSeconds),
       end_time: centerPoint + bufferSeconds,
       transcript_snippet: '⏳ Transcribing...',
       transcript_words: [],
-      status: 'pending' as const,
+      source: 'manual',
+      status: 'pending',
       created_at: new Date().toISOString(),
       metadata: {
         audioUrl: audioUrl || '',
-        episodeTitle: episodeTitle || '',
-        podcastTitle: podcastTitle || '',
-        artwork: artwork || '',
-        optimistic: true,
-      },
+        title: episodeTitle || '',
+        description: podcastTitle || '',
+      } as Hotzone['metadata'],
     }
     addHotzone(optimisticHotzone)
     setSelectedHotzoneId(optimisticId)
@@ -684,7 +683,7 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
         await saveHotzone(enrichedHotzone, audioUrl)
 
         // 用真实热区替换乐观热区
-        const { updateHotzone, removeHotzone } = usePlayerStore.getState()
+        const { removeHotzone } = usePlayerStore.getState()
         removeHotzone(optimisticId)
         addHotzone(enrichedHotzone)
         setSelectedHotzoneId(enrichedHotzone.id)
@@ -711,7 +710,7 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
     } finally {
       setIsMarking(false)
     }
-  }, [audioId, hotzones, addHotzone, audioUrl, seek, hotzoneRange, episodeTitle, podcastTitle, artwork])
+  }, [audioId, hotzones, addHotzone, audioUrl, seek, episodeTitle, podcastTitle, artwork])
 
   // onHotzoneJump(hotzoneId: string, startTime: number): void
   const handleHotzoneJump = useCallback((hotzoneId: string, startTime: number) => {
