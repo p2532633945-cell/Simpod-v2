@@ -63,6 +63,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   currentTime: 0,
   duration: 0,
   isPlaying: false,
+  // P6-W2 Task 2.1: 倍速记忆 — SSR 时用默认值 1，客户端 mount 后在 PodcastPlayerPage 同步
   playbackRate: 1,
   volume: 1,
   hotzones: [],
@@ -107,6 +108,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (audioRef) {
       audioRef.playbackRate = rate
     }
+    // P6-W2 Task 2.1: 倍速记忆 — 持久化到 localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('simpod_playback_rate', String(rate))
+    }
+    console.log('[PlayerStore] Playback rate set to:', rate)
     set({ playbackRate: rate })
   },
   

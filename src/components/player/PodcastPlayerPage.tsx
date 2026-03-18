@@ -94,6 +94,9 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
   
   // P4-5 性能优化：使用 useRef 防止自动跳转重复执行（避免闭包问题）
   const autoPlayExecutedRef = useRef(false)
+  // P6-W2 Task 2.3: 用 ref 传递最新 audioId 给 handleCanPlay（避免闭包捕获旧值）
+  const audioIdRef = useRef(audioId)
+  useEffect(() => { audioIdRef.current = audioId }, [audioId])
 
   // 客户端 mount 后从 localStorage 同步持久化状态
   // 必须在 useEffect 里做，避免 SSR/Client hydration mismatch
@@ -107,14 +110,29 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
       const { setInstantReplayMode } = usePlayerStore.getState()
       setInstantReplayMode(true)
     }
+    // P6-W2 Task 2.1: 倍速记忆 — 客户端恢复上次倍速
+    const savedRate = parseFloat(localStorage.getItem('simpod_playback_rate') || '1')
+    if (savedRate && [0.5, 0.75, 1, 1.25, 1.5, 2].includes(savedRate) && savedRate !== 1) {
+      const { setPlaybackRate } = usePlayerStore.getState()
+      setPlaybackRate(savedRate)
+      console.log('[Player] Restored playback rate from localStorage:', savedRate)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 设置 audioRef 到 store
+  // 设置 audioRef 到 store，并在挂载后立即应用持久化倍速
   useEffect(() => {
     if (audioRef.current) {
       console.log("[Player] Audio element mounted, setting ref to store")
       setAudioRef(audioRef.current)
+      // P6-W2 Task 2.1: audioRef 就绪后立即应用持久化倍速
+      const savedRate = parseFloat(localStorage.getItem('simpod_playback_rate') || '1')
+      if (savedRate && [0.5, 0.75, 1, 1.25, 1.5, 2].includes(savedRate)) {
+        audioRef.current.playbackRate = savedRate
+        const { setPlaybackRate } = usePlayerStore.getState()
+        setPlaybackRate(savedRate)
+        console.log('[Player] Applied saved playback rate to audio element:', savedRate)
+      }
     }
   }, [setAudioRef])
 
@@ -217,19 +235,26 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
       
       // P4-5 性能优化：自动跳转和播放（只执行一次）
       // 使用 ref 而不是 state 避免闭包问题
-      if (!autoPlayExecutedRef.current && startTime !== undefined && startTime >= 0 && startTime <= audio.duration) {
-        audio.currentTime = startTime
-        console.log('[Player] Auto-seeking to:', startTime)
-        
-        if (autoPlay) {
-          audio.play().catch((err) => {
-            console.error('[Player] Auto-play failed:', err)
-          })
-          console.log('[Player] Auto-playing from hotzone')
-        }
-        
-        // 标记已执行，防止重复
+      if (!autoPlayExecutedRef.current) {
         autoPlayExecutedRef.current = true
+
+        if (startTime !== undefined && startTime >= 0 && startTime <= audio.duration) {
+          // 显式 startTime 优先（从热区跳转来的）
+          audio.currentTime = startTime
+          console.log('[Player] Auto-seeking to startTime:', startTime)
+          if (autoPlay) {
+            audio.play().catch((err) => console.error('[Player] Auto-play failed:', err))
+            console.log('[Player] Auto-playing from hotzone')
+          }
+        } else if (!progressRestoredRef.current) {
+          // P6-W2 Task 2.3: 无 startTime 时尝试恢复上次进度
+          progressRestoredRef.current = true
+          const savedProgress = parseInt(localStorage.getItem(`simpod_progress_${audioIdRef.current}`) || '0', 10)
+          if (savedProgress > 0 && savedProgress < audio.duration * 0.95) {
+            audio.currentTime = savedProgress
+            console.log('[Player] Restored progress from localStorage:', savedProgress + 's')
+          }
+        }
       }
     }
 
@@ -418,6 +443,112 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
     // TranscriptStream 会显示提示信息
     return []
   }, [hotzones, selectedHotzoneId])
+
+  // ============================================
+  // P6-W2 Task 2.3: 播放进度持久化
+  // ============================================
+
+  // 每 5 秒将 currentTime 写入 localStorage
+  useEffect(() => {
+    if (!audioId || !isPlaying) return
+    const key = `simpod_progress_${audioId}`
+    const interval = setInterval(() => {
+      const audio = audioRef.current
+      if (!audio || audio.duration <= 0) return
+      // 已完成（> 95%）时不保存，下次从头开始
+      const pct = audio.currentTime / audio.duration
+      if (pct < 0.95) {
+        localStorage.setItem(key, String(Math.floor(audio.currentTime)))
+        console.log('[Player] Progress saved:', Math.floor(audio.currentTime) + 's')
+      } else {
+        localStorage.removeItem(key)
+      }
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [audioId, isPlaying])
+
+  // canplay 时恢复上次进度（只执行一次，且优先于 startTime）
+  // 通过 ref 标记是否已做过进度恢复，避免 handleCanPlay 重复触发
+  const progressRestoredRef = useRef(false)
+  useEffect(() => {
+    // audioId 变化时重置进度恢复标志
+    progressRestoredRef.current = false
+  }, [audioId])
+
+  // ============================================
+  // P6-W2 Task 2.2: Media Session API（锁屏通知栏控制）
+  // ============================================
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return
+
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: episodeTitle || `Episode ${audioId}`,
+      artist: podcastTitle || 'Simpod',
+      album: podcastTitle || 'Simpod',
+      artwork: artwork ? [{ src: artwork, sizes: '512x512', type: 'image/jpeg' }] : [],
+    })
+    console.log('[Player] Media Session metadata set:', episodeTitle)
+  }, [audioId, episodeTitle, podcastTitle, artwork])
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return
+
+    const handleMSPlay = () => {
+      const { setIsPlaying: storeSetPlaying } = usePlayerStore.getState()
+      storeSetPlaying(true)
+    }
+    const handleMSPause = () => {
+      const { setIsPlaying: storeSetPlaying } = usePlayerStore.getState()
+      storeSetPlaying(false)
+    }
+    const handleMSSeekBackward = () => {
+      const audio = audioRef.current
+      if (audio) audio.currentTime = Math.max(0, audio.currentTime - 10)
+    }
+    const handleMSSeekForward = () => {
+      const audio = audioRef.current
+      if (audio) audio.currentTime = Math.min(audio.duration, audio.currentTime + 10)
+    }
+
+    navigator.mediaSession.setActionHandler('play', handleMSPlay)
+    navigator.mediaSession.setActionHandler('pause', handleMSPause)
+    navigator.mediaSession.setActionHandler('seekbackward', handleMSSeekBackward)
+    navigator.mediaSession.setActionHandler('seekforward', handleMSSeekForward)
+
+    console.log('[Player] Media Session action handlers registered')
+
+    return () => {
+      navigator.mediaSession.setActionHandler('play', null)
+      navigator.mediaSession.setActionHandler('pause', null)
+      navigator.mediaSession.setActionHandler('seekbackward', null)
+      navigator.mediaSession.setActionHandler('seekforward', null)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Media Session playback state 同步
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return
+    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused'
+  }, [isPlaying])
+
+  // P6-W2 Task 2.4: M 键触发 MARK
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault()
+        const audio = audioRef.current
+        if (audio && !audioLoading && !isMarking) {
+          console.log('[Player] M key: triggering MARK at', audio.currentTime)
+          handleMark(audio.currentTime)
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioLoading, isMarking])
 
   // ============================================
   // 事件处理 - 遵循技术契约接口

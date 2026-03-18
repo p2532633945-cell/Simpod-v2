@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
 import { MiniPlayer } from "@/components/player/MiniPlayer"
+import { PWAInstallPrompt } from "@/components/pwa/PWAInstallPrompt"
 import "./globals.css"
 
 const geistSans = Geist({
@@ -27,7 +28,7 @@ export const metadata: Metadata = {
     "listening",
   ],
   authors: [{ name: "Simpod" }],
-  manifest: "/manifest.json",
+  manifest: "/manifest.json?v=4",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -82,6 +83,7 @@ export default function RootLayout({
         >
           {children}
           <MiniPlayer />
+          <PWAInstallPrompt />
         </ThemeProvider>
         {/* Register Service Worker */}
         <script

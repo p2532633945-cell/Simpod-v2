@@ -3,7 +3,7 @@
  * Caches static assets for offline use and fast loads
  */
 
-const CACHE_NAME = 'simpod-v3'
+const CACHE_NAME = 'simpod-v4'
 const STATIC_ASSETS = [
   '/',
   '/hotzones',

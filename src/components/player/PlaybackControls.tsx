@@ -12,8 +12,25 @@
 import { useCallback, useRef, useState, useEffect } from "react"
 import { Play, Pause, SkipBack, SkipForward } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { PlaybackControlsProps } from "@/types/simpod"
 import { formatTime } from "@/lib/time"
+import { usePlayerStore } from "@/stores/playerStore"
+
+interface PlaybackControlsProps {
+  playerState: {
+    currentTime: number
+    duration: number
+    isPlaying: boolean
+    playbackRate: number
+    volume?: number
+  }
+  onSeek: (time: number) => void
+  onPlayPause: () => void
+  onRateChange: (rate: number) => void
+  onPrevEpisode?: () => void
+  onNextEpisode?: () => void
+  hasPrev?: boolean
+  hasNext?: boolean
+}
 
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2]
 
@@ -30,9 +47,34 @@ export function PlaybackControls({
   const progressBarRef = useRef<HTMLDivElement>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [showRateMenu, setShowRateMenu] = useState(false)
+  // P6-W2 Task 2.5: 缓冲进度
+  const [bufferedPercent, setBufferedPercent] = useState(0)
 
   const { currentTime, duration, isPlaying, playbackRate } = playerState
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
+
+  // P6-W2 Task 2.5: 每秒轮询 audio.buffered 更新缓冲进度
+  // 用 isMounted 守护，避免 SSR/Client hydration mismatch
+  const [isMounted, setIsMounted] = useState(false)
+  useEffect(() => { setIsMounted(true) }, [])
+
+  useEffect(() => {
+    if (!isMounted) return
+    const getAudio = () => usePlayerStore.getState().audioRef
+    const update = () => {
+      const audio = getAudio()
+      if (!audio || !audio.buffered || audio.duration <= 0) return
+      const len = audio.buffered.length
+      if (len > 0) {
+        const bufferedEnd = audio.buffered.end(len - 1)
+        setBufferedPercent((bufferedEnd / audio.duration) * 100)
+      }
+    }
+    update()
+    const timer = setInterval(update, 1000)
+    return () => clearInterval(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMounted, duration])
 
   // 键盘快捷键
   useEffect(() => {
@@ -42,12 +84,28 @@ export function PlaybackControls({
         case 'ArrowLeft': e.preventDefault(); onSeek(Math.max(0, currentTime - 15)); break
         case 'ArrowRight': e.preventDefault(); onSeek(Math.min(duration, currentTime + 15)); break
         case ' ': e.preventDefault(); onPlayPause(); break
+        // P6-W2 Task 2.4: 新增 YouTube 风格快捷键
+        case 'j': case 'J': e.preventDefault(); onSeek(Math.max(0, currentTime - 10)); break
+        case 'l': case 'L': e.preventDefault(); onSeek(Math.min(duration, currentTime + 10)); break
+        case 'k': case 'K': e.preventDefault(); onPlayPause(); break
+        case '[': e.preventDefault(); {
+          const RATES = [0.5, 0.75, 1, 1.25, 1.5, 2]
+          const idx = RATES.indexOf(playbackRate)
+          if (idx > 0) onRateChange(RATES[idx - 1])
+          break
+        }
+        case ']': e.preventDefault(); {
+          const RATES = [0.5, 0.75, 1, 1.25, 1.5, 2]
+          const idx = RATES.indexOf(playbackRate)
+          if (idx < RATES.length - 1) onRateChange(RATES[idx + 1])
+          break
+        }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentTime, duration, onPlayPause, onSeek])
+  }, [currentTime, duration, playbackRate, onPlayPause, onSeek, onRateChange])
 
   const handleProgressClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -100,6 +158,13 @@ export function PlaybackControls({
           aria-valuemax={duration}
           aria-valuenow={currentTime}
         >
+          {/* P6-W2 Task 2.5: 缓冲进度层 — 仅客户端渲染，避免 hydration mismatch */}
+          {isMounted && bufferedPercent > 0 && (
+            <div
+              className="absolute left-0 top-0 h-full bg-muted-foreground/25 rounded-full"
+              style={{ width: `${bufferedPercent}%` }}
+            />
+          )}
           <div
             className="absolute left-0 top-0 h-full bg-simpod-primary rounded-full"
             style={{ width: `${progress}%` }}
