@@ -445,6 +445,25 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
   }, [hotzones, selectedHotzoneId])
 
   // ============================================
+  // P6-W2 Task 2.2: 后台播放稳定性
+  // Android Chrome PWA 切换 Tab 或锁屏时可能触发 audio pause
+  // 监听 visibilitychange，页面重新可见且用户预期播放时恢复
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const audio = audioRef.current
+        const { isPlaying: wasPlaying } = usePlayerStore.getState()
+        // 如果 store 认为应该在播放但 audio 暂停了，恢复播放
+        if (audio && wasPlaying && audio.paused) {
+          console.log('[Player] Page visible again, resuming playback')
+          audio.play().catch((err) => console.warn('[Player] Resume after visibility change failed:', err))
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [])
+
   // P6-W2 Task 2.3: 播放进度持久化
   // ============================================
 
