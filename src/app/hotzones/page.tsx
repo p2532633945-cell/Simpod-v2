@@ -364,6 +364,33 @@ function HotzoneCard({ hotzone, isSelected, isUpdating, onSelect, onJump, onStat
             className="mb-3"
           />
 
+          {/* 置信度进度条 */}
+          {hotzone.transcript_confidence !== undefined && hotzone.transcript_confidence !== null && (
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] text-muted-foreground">
+                  {hotzone.transcript_source === 'official' ? '✓ Official' :
+                   hotzone.transcript_source === 'user' ? '✏️ Edited' : '⚡ Groq'}
+                </span>
+                <span className={cn(
+                  "text-[10px] font-mono",
+                  hotzone.transcript_confidence >= 80 ? "text-green-500" :
+                  hotzone.transcript_confidence >= 60 ? "text-amber-500" : "text-red-500"
+                )}>{hotzone.transcript_confidence}%</span>
+              </div>
+              <div className="h-1 rounded-full bg-secondary overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all",
+                    hotzone.transcript_confidence >= 80 ? "bg-green-500" :
+                    hotzone.transcript_confidence >= 60 ? "bg-amber-500" : "bg-red-500"
+                  )}
+                  style={{ width: `${hotzone.transcript_confidence}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className={cn("text-xs px-1.5 py-0.5 rounded",

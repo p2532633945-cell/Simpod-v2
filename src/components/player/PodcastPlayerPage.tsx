@@ -20,6 +20,7 @@ import { HotzoneSidebar } from "@/components/hotzones/HotzoneSidebar"
 
 // Zustand store
 import { usePlayerStore } from "@/stores/playerStore"
+import type { HotzoneRange } from "@/stores/playerStore"
 
 // 类型
 import type { Word, Anchor } from "@/types/simpod"
@@ -93,6 +94,21 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
   
   // P4-5 性能优化：使用 useRef 防止自动跳转重复执行（避免闭包问题）
   const autoPlayExecutedRef = useRef(false)
+
+  // 客户端 mount 后从 localStorage 同步持久化状态
+  // 必须在 useEffect 里做，避免 SSR/Client hydration mismatch
+  useEffect(() => {
+    const savedRange = localStorage.getItem('simpod_hotzone_range') as HotzoneRange | null
+    if (savedRange && ['tight', 'normal', 'wide'].includes(savedRange)) {
+      setHotzoneRange(savedRange)
+    }
+    const savedReplay = localStorage.getItem('simpod_instant_replay')
+    if (savedReplay === 'true') {
+      const { setInstantReplayMode } = usePlayerStore.getState()
+      setInstantReplayMode(true)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 设置 audioRef 到 store
   useEffect(() => {
@@ -333,6 +349,8 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
 
   // 加载当前 audio_id 的热区 - 从数据库
   useEffect(() => {
+    let cancelled = false  // 防止竞态：audioId 变化时取消旧请求
+
     const loadHotzones = async () => {
       try {
         console.log("[Player] DIAG: audioId changed to:", audioId)
@@ -346,6 +364,8 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
         console.log("[Player] DIAG: Reset hotzones for new audioId")
         
         const fetchedHotzones = await fetchHotzones(audioId)
+        if (cancelled) return  // audioId 已变化，丢弃结果
+
         console.log("[Player] DIAG: Fetched hotzones:", fetchedHotzones.length)
 
         // 去重：防止重复 ID 导致 React key 冲突
@@ -363,6 +383,7 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
         setHotzonesDirect(uniqueHotzones)
         console.log("[Player] DIAG: Set hotzones in store, unique count:", uniqueHotzones.length)
       } catch (err) {
+        if (cancelled) return
         const error = err as Error
         console.error("[Player] Failed to load hotzones:", error.message)
 
@@ -376,8 +397,9 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
 
     loadHotzones()
 
-    // 清理：只清除热区列表，不暂停音频（MiniPlayer 需要继续播放）
+    // 清理：取消竞态 + 清除热区列表
     return () => {
+      cancelled = true
       if (audioId) {
         console.log("[Player] DIAG: Cleanup hotzones for audioId:", audioId)
         const { setHotzones: setHotzonesDirect } = usePlayerStore.getState()
@@ -494,7 +516,7 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
     } finally {
       setIsMarking(false)
     }
-  }, [audioId, hotzones, addHotzone, audioUrl, seek])
+  }, [audioId, hotzones, addHotzone, audioUrl, seek, hotzoneRange])
 
   // onHotzoneJump(hotzoneId: string, startTime: number): void
   const handleHotzoneJump = useCallback((hotzoneId: string, startTime: number) => {

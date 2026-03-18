@@ -12,22 +12,32 @@ import { getAudioContextPool } from '@/lib/audio-context-pool';
 /**
  * Fetches a slice of a remote audio file using our custom Vercel Proxy.
  * This handles CORS, Mixed Content, and Range Requests robustly.
+ *
+ * 优化：精确估算起始字节，减少下载量
+ * - 从 startTime 对应的字节开始下载，而非从 0 开始
+ * - 加 10s buffer 保证解码帧对齐
+ * - 对于 400s 处的热区，只需下载约 20s 的数据而非 400s
  */
 export const sliceRemoteAudio = async (url: string, startTime: number, endTime: number): Promise<Blob> => {
-    const BITRATE_ESTIMATE = 32 * 1024; // 32KB/s (256kbps)
-    const BUFFER_SECONDS = 10;
+    // 动态估算比特率（默认 128kbps = 16KB/s，常见播客格式）
+    const BITRATE_ESTIMATE = 16 * 1024; // 16KB/s (128kbps)
+    const BUFFER_SECONDS = 15; // 前后各加 15s buffer 保证帧对齐
+
+    // 精确计算字节范围：从 startTime 前 BUFFER_SECONDS 开始
+    const startByte = Math.max(0, Math.floor((startTime - BUFFER_SECONDS) * BITRATE_ESTIMATE));
     const endByte = Math.floor((endTime + BUFFER_SECONDS) * BITRATE_ESTIMATE);
 
     const proxyUrl = `/api/audio-proxy?url=${encodeURIComponent(url)}`;
 
-    console.log(`[RemoteSlice] Fetching 0-${endByte} bytes from ${url} via /api/audio-proxy...`);
+    console.log(`[RemoteSlice] Fetching bytes ${startByte}-${endByte} (${((endByte - startByte) / 1024).toFixed(0)}KB) from ${url} via /api/audio-proxy...`);
+    console.log(`[RemoteSlice] Time range: ${startTime.toFixed(1)}s - ${endTime.toFixed(1)}s, buffer: ±${BUFFER_SECONDS}s`);
 
     let audioContext: AudioContext | null = null;
 
     try {
         const response = await fetch(proxyUrl, {
             headers: {
-                'Range': `bytes=0-${endByte}`
+                'Range': `bytes=${startByte}-${endByte}`
             }
         });
 
@@ -36,24 +46,32 @@ export const sliceRemoteAudio = async (url: string, startTime: number, endTime: 
              const contentRange = response.headers.get('Content-Range');
              console.log(`[RemoteSlice] Partial Content received. Range: ${contentRange}`);
         } else if (response.status === 200) {
-             console.warn(`[RemoteSlice] Server returned 200 OK (Full File). Downloading potentially large file...`);
+             console.warn(`[RemoteSlice] Server returned 200 OK (Full File). Server doesn't support Range requests.`);
         } else {
              throw new Error(`Proxy Fetch failed: ${response.status} ${response.statusText}`);
         }
 
         const arrayBuffer = await response.arrayBuffer();
-        console.log(`[RemoteSlice] Downloaded ${arrayBuffer.byteLength} bytes.`);
+        console.log(`[RemoteSlice] Downloaded ${(arrayBuffer.byteLength / 1024).toFixed(0)}KB.`);
 
         // 从对象池获取 AudioContext
         const pool = getAudioContextPool();
         audioContext = pool.getContext();
 
-        // Decode might fail if the file is truncated mid-frame, but usually browsers handle it.
+        // Decode — browser handles partial MP3 frames gracefully
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         console.log(`[RemoteSlice] Decoded audio duration: ${audioBuffer.duration.toFixed(2)}s`);
 
-        // 4. Slice to the exact requested time
-        const result = sliceAudioBuffer(audioBuffer, startTime, endTime, audioContext);
+        // 计算相对时间偏移（因为我们从 startByte 开始，不是从 0 开始）
+        const byteOffset = startByte;
+        const timeOffset = byteOffset / BITRATE_ESTIMATE;
+        const relativeStart = Math.max(0, startTime - timeOffset);
+        const relativeEnd = Math.min(audioBuffer.duration, endTime - timeOffset);
+
+        console.log(`[RemoteSlice] Slicing: relative ${relativeStart.toFixed(2)}s - ${relativeEnd.toFixed(2)}s from decoded buffer`);
+
+        // Slice to the exact requested time
+        const result = sliceAudioBuffer(audioBuffer, relativeStart, relativeEnd, audioContext);
 
         // 释放 AudioContext 回对象池
         pool.releaseContext(audioContext);

@@ -38,6 +38,16 @@ export const saveHotzone = async (hotzone: Hotzone, audioUrl?: string) => {
     delete dbPayload.transcript_words;
   }
 
+  // P6-1.1: 保存转录来源和置信度
+  if (payload.transcript_source) {
+    dbPayload.transcript_source = payload.transcript_source;
+    console.log('[Supabase] Saving transcript_source:', payload.transcript_source);
+  }
+  if (payload.transcript_confidence !== undefined) {
+    dbPayload.transcript_confidence = payload.transcript_confidence;
+    console.log('[Supabase] Saving transcript_confidence:', payload.transcript_confidence);
+  }
+
   // P4-5 性能优化：保存 audioUrl 到 metadata 以便从复盘页面跳转时使用
   if (audioUrl) {
     dbPayload.metadata = {

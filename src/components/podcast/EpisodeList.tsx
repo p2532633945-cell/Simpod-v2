@@ -7,7 +7,7 @@
 "use client"
 
 import { useState } from "react"
-import { Play, Clock, Calendar, AlertCircle } from "lucide-react"
+import { Play, Clock, Calendar, AlertCircle, FileText } from "lucide-react"
 import Link from "next/link"
 import type { Episode } from "@/types/simpod"
 
@@ -125,6 +125,15 @@ function EpisodeItem({
               <Calendar size={14} />
               {formatDate(episode.pubDate)}
             </div>
+            {episode.officialTranscript && (
+              <div
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-medium"
+                title={`Official transcript available (${episode.officialTranscript.type}${episode.officialTranscript.language ? ` · ${episode.officialTranscript.language}` : ''})`}
+              >
+                <FileText size={11} />
+                <span>Transcript</span>
+              </div>
+            )}
           </div>
           {isExpanded && episode.description && (
             <p className="mt-3 text-sm text-muted-foreground line-clamp-3">

@@ -71,15 +71,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   // Mini Player
   currentEpisodeInfo: null,
 
-  // P6-3: 热区时间范围档位（持久化到 localStorage）
-  hotzoneRange: (typeof window !== 'undefined'
-    ? (localStorage.getItem('simpod_hotzone_range') as HotzoneRange) || 'normal'
-    : 'normal') as HotzoneRange,
+  // P6-3: 热区时间范围档位
+  // 注意：SSR 时始终用默认值，客户端 mount 后通过 setHotzoneRange 从 localStorage 同步
+  // 避免 SSR/Client className 不一致导致 hydration mismatch
+  hotzoneRange: 'normal' as HotzoneRange,
 
-  // P6-2: 即时回溯模式（持久化到 localStorage）
-  instantReplayMode: typeof window !== 'undefined'
-    ? localStorage.getItem('simpod_instant_replay') === 'true'
-    : false,
+  // P6-2: 即时回溯模式
+  instantReplayMode: false,
 
   // Time actions
   setCurrentTime: (time) => set({ currentTime: time }),
@@ -142,10 +140,23 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   // Hotzone actions
-  setHotzones: (hotzones) => set({ hotzones }),
+  setHotzones: (hotzones) => set(() => {
+    // 去重：防止 StrictMode 双重执行或竞态导致重复 id
+    const seen = new Set<string>()
+    return {
+      hotzones: hotzones.filter(hz => {
+        if (seen.has(hz.id)) return false
+        seen.add(hz.id)
+        return true
+      })
+    }
+  }),
   
-  addHotzone: (hotzone) => set((state) => ({ 
-    hotzones: [...state.hotzones, hotzone] 
+  addHotzone: (hotzone) => set((state) => ({
+    // 防止重复添加相同 id 的热区（扩展逻辑可能返回已有 id）
+    hotzones: state.hotzones.some(h => h.id === hotzone.id)
+      ? state.hotzones.map(h => h.id === hotzone.id ? hotzone : h)
+      : [...state.hotzones, hotzone]
   })),
   
   removeHotzone: (id) => set((state) => ({

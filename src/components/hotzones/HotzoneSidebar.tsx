@@ -325,6 +325,8 @@ function HotzoneCard({
           text={hotzone.transcript_snippet}
           maxLength={90}
           className="text-xs text-muted-foreground leading-relaxed"
+          confidence={hotzone.transcript_confidence}
+          source={hotzone.transcript_source}
         />
       </div>
 

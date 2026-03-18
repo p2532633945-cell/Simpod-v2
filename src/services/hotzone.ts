@@ -8,6 +8,7 @@ import { Anchor, Hotzone, TranscriptSegment } from '@/types';
 import { sliceAudio, sliceRemoteAudio } from '@/utils/audio';
 import { transcribeAudio } from './groq';
 import { findExistingTranscript, saveTranscript } from './supabase';
+import { transcribeWithOpenAI, compareTranscriptions, calculateAudioHash, estimateConfidenceFromText } from './transcription';
 
 // Simple UUID generator
 const generateId = () => Math.random().toString(36).substring(2, 11);
@@ -289,6 +290,8 @@ export const processAnchorsToHotzones = async (
 
       let text = hz.transcript_snippet;
       let words: Array<{ word: string; start: number; end: number }> | undefined = undefined;
+      let transcriptSource: 'official' | 'groq' | 'user' = 'groq';
+      let transcriptConfidence: number = 100;
 
       if (!text || text === "Processing...") {
         const existing = await findExistingTranscript(hz.audio_id, hz.start_time, hz.end_time);
@@ -301,6 +304,32 @@ export const processAnchorsToHotzones = async (
             const result = await transcribeAudio(audioSlice);
             text = result.text;
             words = result.words;
+
+            // P6-1.2: Multi-model transcription comparison
+            // 策略：如果配置了 OPENAI_API_KEY 则进行真实对比，否则用启发式算法估算置信度
+            const hasOpenAI = typeof process !== 'undefined' && !!process.env?.OPENAI_API_KEY;
+            if (hasOpenAI) {
+              try {
+                console.log(`[Hotzone] Starting multi-model comparison for ${hz.id}...`);
+                const audioBuffer = await audioSlice.arrayBuffer();
+                const openaiText = await transcribeWithOpenAI(audioBuffer);
+                const { similarity, confidence, needsReview } = compareTranscriptions(text, openaiText);
+                transcriptConfidence = confidence;
+                console.log(`[Hotzone] Multi-model result: similarity=${similarity}%, confidence=${confidence}%, needsReview=${needsReview}`);
+                if (needsReview) {
+                  console.warn(`[Hotzone] Low confidence (${confidence}%) - marked for manual review`);
+                }
+              } catch (err) {
+                const message = err instanceof Error ? err.message : 'Unknown error';
+                console.warn(`[Hotzone] OpenAI comparison failed, falling back to heuristic:`, message);
+                transcriptConfidence = estimateConfidenceFromText(text);
+              }
+            } else {
+              // 无 OpenAI Key：用启发式算法估算置信度（基于转录文本质量）
+              transcriptConfidence = estimateConfidenceFromText(text);
+              console.log(`[Hotzone] Heuristic confidence for ${hz.id}: ${transcriptConfidence}%`);
+            }
+
             const saveResult = await saveTranscript(hz.audio_id, hz.start_time, hz.end_time, text, words);
             if (!saveResult.success) {
                 console.warn(`[Cache] Failed to save transcript for ${hz.id}: ${saveResult.error}`);
@@ -333,13 +362,20 @@ export const processAnchorsToHotzones = async (
                         start: hz.start_time + w.start,
                         end: hz.start_time + w.end
                 })),
+                transcript_source: transcriptSource,
+                transcript_confidence: transcriptConfidence,
                 metadata: {
                     ...hz.metadata,
                 }
             };
         }
       }
-      return { ...hz, transcript_snippet: text };
+      return { 
+        ...hz, 
+        transcript_snippet: text,
+        transcript_source: transcriptSource,
+        transcript_confidence: transcriptConfidence
+      };
     } catch (error) {
       console.error(`Error processing hotzone ${hz.id}:`, error);
       return { ...hz, transcript_snippet: "[Processing Failed]" };

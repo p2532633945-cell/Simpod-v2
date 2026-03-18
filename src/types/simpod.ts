@@ -64,6 +64,8 @@ export interface Hotzone {
   source: 'manual' | 'auto'
   metadata: HotzoneMetadata
   status: 'pending' | 'reviewed' | 'archived'
+  transcript_source?: 'official' | 'groq' | 'user'
+  transcript_confidence?: number
   created_at: string
 }
 
@@ -91,6 +93,14 @@ export interface Podcast {
   source?: 'podcastindex' | 'itunes' | 'rss'
 }
 
+/** 官方转录信息 */
+export interface OfficialTranscript {
+  url: string
+  type: string
+  language?: string
+  rel?: string
+}
+
 /** Podcast 单集 */
 export interface Episode {
   id: string
@@ -100,6 +110,7 @@ export interface Episode {
   audioUrl: string
   duration?: number
   artwork?: string
+  officialTranscript?: OfficialTranscript
 }
 
 /** 项目（用于首页展示） */

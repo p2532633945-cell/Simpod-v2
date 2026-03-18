@@ -29,6 +29,12 @@ interface Episode {
   audioUrl: string
   duration?: number
   artwork?: string
+  officialTranscript?: {
+    url: string
+    type: string
+    language?: string
+    rel?: string
+  }
 }
 
 interface PodcastWithEpisodes {
@@ -58,7 +64,7 @@ export class PodcastManager {
     // 检查缓存
     const cached = this.cache.get(feedUrl)
     if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
-      console.log('[PodcastManager] Cache hit for:', feedUrl)
+      console.log('[PodcastManager] Cache hit for:', feedUrl, '| episodesWithTranscript:', cached.data.episodes.filter((e: Episode) => e.officialTranscript).length)
       return cached.data
     }
 
@@ -95,7 +101,8 @@ export class PodcastManager {
     console.log('[PodcastManager] Loaded:', {
       title: data.podcast.title,
       episodes: validEpisodes.length,
-      firstAudioUrl: validEpisodes[0]?.audioUrl
+      firstAudioUrl: validEpisodes[0]?.audioUrl,
+      episodesWithTranscript: validEpisodes.filter(e => e.officialTranscript).length,
     })
 
     return data
