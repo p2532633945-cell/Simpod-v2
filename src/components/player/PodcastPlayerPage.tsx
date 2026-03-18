@@ -514,6 +514,9 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
     navigator.mediaSession.setActionHandler('pause', handleMSPause)
     navigator.mediaSession.setActionHandler('seekbackward', handleMSSeekBackward)
     navigator.mediaSession.setActionHandler('seekforward', handleMSSeekForward)
+    // previoustrack/nexttrack 映射为快退/快进，让锁屏显示更多控制按钮
+    navigator.mediaSession.setActionHandler('previoustrack', handleMSSeekBackward)
+    navigator.mediaSession.setActionHandler('nexttrack', handleMSSeekForward)
 
     console.log('[Player] Media Session action handlers registered')
 
@@ -522,6 +525,8 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
       navigator.mediaSession.setActionHandler('pause', null)
       navigator.mediaSession.setActionHandler('seekbackward', null)
       navigator.mediaSession.setActionHandler('seekforward', null)
+      navigator.mediaSession.setActionHandler('previoustrack', null)
+      navigator.mediaSession.setActionHandler('nexttrack', null)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
