@@ -614,6 +614,37 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
     }
 
     setIsMarking(true)
+
+    // ============================================
+    // P6-W3 乐观 UI：MARK 按下瞬间立即显示热区卡片
+    // 不等待转录完成，用户可以继续听
+    // ============================================
+    const { hotzoneRange: currentRange } = usePlayerStore.getState()
+    const bufferSeconds = currentRange === 'tight' ? 3 : currentRange === 'wide' ? 20 : 10
+    const REACTION_OFFSET = 2
+    const centerPoint = Math.max(0, timestamp - REACTION_OFFSET)
+    const optimisticId = `optimistic_${Math.random().toString(36).substring(2, 11)}`
+    const optimisticHotzone = {
+      id: optimisticId,
+      audio_id: audioId,
+      start_time: Math.max(0, centerPoint - bufferSeconds),
+      end_time: centerPoint + bufferSeconds,
+      transcript_snippet: '⏳ Transcribing...',
+      transcript_words: [],
+      status: 'pending' as const,
+      created_at: new Date().toISOString(),
+      metadata: {
+        audioUrl: audioUrl || '',
+        episodeTitle: episodeTitle || '',
+        podcastTitle: podcastTitle || '',
+        artwork: artwork || '',
+        optimistic: true,
+      },
+    }
+    addHotzone(optimisticHotzone)
+    setSelectedHotzoneId(optimisticId)
+    console.log('[Player] Optimistic hotzone added:', optimisticId)
+
     try {
       const generateAnchorId = (prefix: string) => `${prefix}_${Math.random().toString(36).substring(2, 11)}`
 
@@ -626,9 +657,6 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
       }
 
       console.log("[Player] Creating hotzone from anchor at:", timestamp)
-
-      // P6-3: 读取当前档位 from store
-      const { hotzoneRange: currentRange } = usePlayerStore.getState()
 
       const [newHotzone] = await processAnchorsToHotzones(
         [anchor],
@@ -654,9 +682,13 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
           }
         }
         await saveHotzone(enrichedHotzone, audioUrl)
+
+        // 用真实热区替换乐观热区
+        const { updateHotzone, removeHotzone } = usePlayerStore.getState()
+        removeHotzone(optimisticId)
         addHotzone(enrichedHotzone)
         setSelectedHotzoneId(enrichedHotzone.id)
-        console.log("[Player] Hotzone created successfully")
+        console.log("[Player] Optimistic hotzone replaced with real:", enrichedHotzone.id)
 
         // P6-2: 即时回溯模式 — 热区生成后自动跳回起点
         const { instantReplayMode: replayMode } = usePlayerStore.getState()
@@ -664,14 +696,22 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
           console.log('[Player] Instant replay: seeking to hotzone start', enrichedHotzone.start_time)
           seek(enrichedHotzone.start_time)
         }
+      } else {
+        // 转录失败：移除乐观热区
+        const { removeHotzone } = usePlayerStore.getState()
+        removeHotzone(optimisticId)
+        console.warn('[Player] Hotzone generation failed, removing optimistic card')
       }
     } catch (error) {
       console.error("[Player] Failed to create hotzone:", error)
-      alert("Failed to create hotzone. Please try again.")
+      // 移除乐观热区，不弹 alert 打断播放
+      const { removeHotzone } = usePlayerStore.getState()
+      removeHotzone(optimisticId)
+      console.warn('[Player] Optimistic hotzone removed due to error')
     } finally {
       setIsMarking(false)
     }
-  }, [audioId, hotzones, addHotzone, audioUrl, seek, hotzoneRange])
+  }, [audioId, hotzones, addHotzone, audioUrl, seek, hotzoneRange, episodeTitle, podcastTitle, artwork])
 
   // onHotzoneJump(hotzoneId: string, startTime: number): void
   const handleHotzoneJump = useCallback((hotzoneId: string, startTime: number) => {
