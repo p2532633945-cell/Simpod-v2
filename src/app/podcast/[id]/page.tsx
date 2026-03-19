@@ -11,9 +11,60 @@ import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import { podcastManager } from "@/services/podcast-manager"
 import { EpisodeList } from "@/components/podcast/EpisodeList"
-import { ArrowLeft, Loader2, AlertCircle } from "lucide-react"
+import { ArrowLeft, Loader2 } from "lucide-react"
 import Link from "next/link"
 import type { Podcast, Episode } from "@/types/simpod"
+import { saveTranscript } from "@/services/supabase"
+import { parseTranscript } from "@/lib/transcript-parser"
+
+/**
+ * Task 3.2: 后台预存官方转录
+ * 下载 VTT/SRT 文件，解析后按时间段存入 transcripts 表
+ * 静默执行，不影响 UI
+ */
+async function prefetchOfficialTranscript(episode: Episode): Promise<void> {
+  const transcriptUrl = episode.officialTranscript?.url
+  if (!transcriptUrl) return
+
+  const audioId = episode.id
+  console.log(`[Transcript] Prefetching official transcript for ${audioId}: ${transcriptUrl}`)
+
+  try {
+    // 通过 rss-proxy 下载转录文件（避免 CORS）
+    const proxyUrl = `/api/rss-proxy?url=${encodeURIComponent(transcriptUrl)}`
+    const res = await fetch(proxyUrl)
+    if (!res.ok) {
+      console.warn(`[Transcript] Failed to fetch transcript: ${res.status}`)
+      return
+    }
+    const content = await res.text()
+    const mimeType = episode.officialTranscript?.type || ''
+
+    const cues = parseTranscript(content, mimeType)
+    if (cues.length === 0) {
+      console.warn(`[Transcript] No cues parsed from transcript for ${audioId}`)
+      return
+    }
+
+    console.log(`[Transcript] Parsed ${cues.length} cues for ${audioId}, saving to DB...`)
+
+    // 把所有 cues 合并为一条整集转录记录（start=0, end=最后一个 cue 的 end）
+    // 同时保存词级别数据供精确定位
+    const fullText = cues.map(c => c.text).join(' ')
+    const words = cues.map(c => ({ word: c.text, start: c.start, end: c.end }))
+    const totalEnd = cues[cues.length - 1].end
+
+    const result = await saveTranscript(audioId, 0, totalEnd, fullText, words)
+    if (result.success) {
+      console.log(`[Transcript] Official transcript saved for ${audioId}: ${cues.length} cues, ${totalEnd.toFixed(0)}s`)
+    } else {
+      console.warn(`[Transcript] Failed to save transcript for ${audioId}:`, result.error)
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.warn(`[Transcript] Prefetch error for ${audioId}:`, message)
+  }
+}
 
 export default function PodcastPage() {
   const searchParams = useSearchParams()
@@ -51,6 +102,20 @@ export default function PodcastPage() {
           podcastTitle: result.podcast.title,
           episodeCount: result.episodes.length,
         })
+
+        // Task 3.2: 后台静默预存官方转录
+        // 遍历有 officialTranscript 的剧集，下载并存入 DB，不阻塞 UI
+        const episodesWithTranscript = result.episodes.filter(ep => ep.officialTranscript?.url)
+        if (episodesWithTranscript.length > 0) {
+          console.log(`[Transcript] Found ${episodesWithTranscript.length} episodes with official transcripts, prefetching in background...`)
+          // 只预存最新的 5 集，避免一次性请求过多
+          const toPrestore = episodesWithTranscript.slice(0, 5)
+          for (const ep of toPrestore) {
+            prefetchOfficialTranscript(ep).catch(err =>
+              console.warn(`[Transcript] Prefetch failed for ${ep.id}:`, err)
+            )
+          }
+        }
 
       } catch (err: any) {
         console.error('[Podcast Page] Error:', err)

@@ -63,12 +63,16 @@ export const sliceRemoteAudio = async (url: string, startTime: number, endTime: 
         console.log(`[RemoteSlice] Decoded audio duration: ${audioBuffer.duration.toFixed(2)}s`);
 
         // 计算相对时间偏移（因为我们从 startByte 开始，不是从 0 开始）
-        const byteOffset = startByte;
-        const timeOffset = byteOffset / BITRATE_ESTIMATE;
-        const relativeStart = Math.max(0, startTime - timeOffset);
-        const relativeEnd = Math.min(audioBuffer.duration, endTime - timeOffset);
+        // 关键修复：从解码后的实际 duration 反推真实比特率，避免固定 BITRATE_ESTIMATE 导致偏移错误
+        const actualBytesDownloaded = arrayBuffer.byteLength
+        const actualDuration = audioBuffer.duration
+        const actualBitrate = actualBytesDownloaded / actualDuration  // bytes/s
+        const timeOffset = startByte / actualBitrate  // 用实际比特率计算时间偏移
+        const relativeStart = Math.max(0, startTime - timeOffset)
+        const relativeEnd = Math.min(audioBuffer.duration, endTime - timeOffset)
 
-        console.log(`[RemoteSlice] Slicing: relative ${relativeStart.toFixed(2)}s - ${relativeEnd.toFixed(2)}s from decoded buffer`);
+        console.log(`[RemoteSlice] Actual bitrate: ${(actualBitrate / 1024).toFixed(1)}KB/s, timeOffset: ${timeOffset.toFixed(2)}s`)
+        console.log(`[RemoteSlice] Slicing: relative ${relativeStart.toFixed(2)}s - ${relativeEnd.toFixed(2)}s from decoded buffer`)
 
         // Slice to the exact requested time
         const result = sliceAudioBuffer(audioBuffer, relativeStart, relativeEnd, audioContext);

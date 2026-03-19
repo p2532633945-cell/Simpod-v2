@@ -290,10 +290,35 @@ export const processAnchorsToHotzones = async (
 
       let text = hz.transcript_snippet;
       let words: Array<{ word: string; start: number; end: number }> | undefined = undefined;
-      const transcriptSource: 'official' | 'groq' | 'user' = 'groq';
+      let transcriptSource: 'official' | 'groq' | 'user' = 'groq';
       let transcriptConfidence: number = 100;
 
       if (!text || text === "Processing...") {
+        // Task 3.2: 先查整集官方转录（audio_id, start=0）
+        // 官方转录以 start=0 存储，包含整集的所有词级时间戳
+        const officialFull = await findExistingTranscript(hz.audio_id, 0, 999999)
+        if (officialFull && officialFull.words && officialFull.words.length > 0) {
+          // 从整集转录中提取对应时间段的词
+          const segWords = officialFull.words.filter(
+            (w: { word: string; start: number; end: number }) => w.start >= hz.start_time && w.end <= hz.end_time
+          )
+          if (segWords.length > 0) {
+            text = segWords.map((w: { word: string }) => w.word).join(' ')
+            words = segWords
+            transcriptSource = 'official'
+            transcriptConfidence = 100
+            console.log(`[Hotzone] Official transcript hit for ${hz.id}: ${segWords.length} words extracted (${hz.start_time.toFixed(1)}s-${hz.end_time.toFixed(1)}s)`)
+            // 跳过 Groq，直接返回
+            return {
+              ...hz,
+              transcript_snippet: text,
+              transcript_words: words,
+              transcript_source: transcriptSource,
+              transcript_confidence: transcriptConfidence,
+            }
+          }
+        }
+
         const existing = await findExistingTranscript(hz.audio_id, hz.start_time, hz.end_time);
         if (existing) {
             console.log(`[Reuse] Found shared transcript for Hotzone ${hz.id}`);
