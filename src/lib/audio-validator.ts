@@ -39,8 +39,6 @@ export function validateAudioUrl(url: string): {
 
   // 宽松策略：允许任何有效的 URL
   // 实际可访问性由 audio-tester 工具验证
-  console.log('[AudioValidator] URL validated (basic check):', cleanedUrl)
-
   return { valid: true, cleanedUrl }
 }
 
