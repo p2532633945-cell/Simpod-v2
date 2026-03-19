@@ -195,3 +195,49 @@
 - 用户量>500：Podscribe.ai（/月，Top5000英文播客全文，可批量存DB）
 - 用户量>1000：AssemblyAI（.37/小时，说话人识别+章节，Pro专属）
 
+
+
+---
+
+## 播客预热库建设计划（待启动）
+
+### 目标
+对主流英文播客的每集前 5 分钟进行批量预转录，实现用户首次播放即命中缓存（模式 B）。
+
+### 阶段划分
+
+**阶段 A：人工种子库（现在可做，成本极低）**
+- 手动收集 20-30 个优质英文学习播客的 RSS 地址
+- 编写一次性脚本：遍历每个播客最新 10 集，调用 /api/transcribe-segment 转录前 5 分钟
+- 预计成本：30 播客 × 10 集 × \.009/集 = \.7（¥20），一次性投入
+- 触发时机：手动运行，或部署到 Vercel Cron Job（每天新集发布后自动补充）
+- 效果：覆盖约 300 集，用户听这些播客时冷启动窗口为 0
+
+**阶段 B：用户行为驱动（用户量 > 50 后）**
+- 在 Supabase 记录每个 audio_id 的播放次数（play_count）
+- 定期（每天）查询 play_count > 3 的剧集，补充预转录
+- 热门剧集自动进入预热库，长尾剧集按需转录
+- 成本：按实际播放量付费，高效率
+
+**阶段 C：Vercel Cron 自动化（用户量 > 200 后）**
+- 配置 vercel.json cron job，每天凌晨爬取种子库播客的新剧集
+- 自动转录前 5 分钟，更新缓存
+- 可选：扩展到全集转录（≤30min 的剧集）
+
+### 种子播客候选列表（待填充）
+- BBC Global News / Newshour
+- NPR Up First
+- The Economist
+- Lex Fridman Podcast
+- 6 Minute English (BBC Learning English)
+- All Ears English
+- The English We Speak (BBC)
+- TED Talks Daily
+- Huberman Lab
+- 待补充...
+
+### 实施提醒
+- **现在**：手动运行种子库脚本（阶段 A）
+- **用户量 > 50**：开启行为驱动预热（阶段 B）
+- **用户量 > 200**：配置 Cron 自动化（阶段 C）
+- **用户量 > 1000**：评估 Podscribe.ai 批量转录数据（见数据源章节）
