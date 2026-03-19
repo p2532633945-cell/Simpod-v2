@@ -57,6 +57,9 @@ export const sliceRemoteAudio = async (url: string, startTime: number, endTime: 
           throw new Error(`Audio proxy returned empty response (status: ${response.status}, url: ${url.slice(0, 80)})`)
         }
 
+        // 在 decodeAudioData 之前保存 byteLength（decode 后 ArrayBuffer 被 transfer，byteLength 变 0）
+        const downloadedBytes = arrayBuffer.byteLength
+
         // 从对象池获取 AudioContext
         const pool = getAudioContextPool();
         audioContext = pool.getContext();
@@ -67,13 +70,12 @@ export const sliceRemoteAudio = async (url: string, startTime: number, endTime: 
 
         // 计算相对时间偏移（因为我们从 startByte 开始，不是从 0 开始）
         // 关键修复：从解码后的实际 duration 反推真实比特率，避免固定 BITRATE_ESTIMATE 导致偏移错误
-        const actualBytesDownloaded = arrayBuffer.byteLength
+        // 注意：decodeAudioData 会 transfer ArrayBuffer，之后 byteLength=0，所以用预先保存的 downloadedBytes
         const actualDuration = audioBuffer.duration
-        // 防止除以零：actualDuration 为 0 时回退到估算比特率
         const actualBitrate = actualDuration > 0
-          ? actualBytesDownloaded / actualDuration
+          ? downloadedBytes / actualDuration
           : BITRATE_ESTIMATE
-        const timeOffset = startByte / actualBitrate  // 用实际比特率计算时间偏移
+        const timeOffset = startByte / actualBitrate
         const relativeStart = Math.max(0, startTime - timeOffset)
         const relativeEnd = Math.min(audioBuffer.duration, endTime - timeOffset)
 
