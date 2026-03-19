@@ -300,6 +300,10 @@ export const processAnchorsToHotzones = async (
         const cachedTranscript = await findExistingTranscript(hz.audio_id, hz.start_time, hz.end_time)
         if (cachedTranscript && cachedTranscript.words && cachedTranscript.words.length > 0) {
           // 从缓存转录中提取对应时间段的词
+          const allWordTimes = cachedTranscript.words.map((w: { start: number; end: number }) => w.start)
+          const minWordTime = Math.min(...allWordTimes)
+          const maxWordTime = Math.max(...allWordTimes)
+          console.log(`[Hotzone] Cache words time range: ${minWordTime.toFixed(1)}s - ${maxWordTime.toFixed(1)}s, looking for: ${hz.start_time.toFixed(1)}s-${hz.end_time.toFixed(1)}s`)
           const segWords = cachedTranscript.words.filter(
             (w: { word: string; start: number; end: number }) => w.start >= hz.start_time && w.end <= hz.end_time + 1
           )
