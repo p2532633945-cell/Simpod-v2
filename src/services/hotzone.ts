@@ -294,20 +294,21 @@ export const processAnchorsToHotzones = async (
       let transcriptConfidence: number = 100;
 
       if (!text || text === "Processing...") {
-        // Task 3.2: 先查整集官方转录（audio_id, start=0）
-        // 官方转录以 start=0 存储，包含整集的所有词级时间戳
-        const officialFull = await findExistingTranscript(hz.audio_id, 0, 999999)
-        if (officialFull && officialFull.words && officialFull.words.length > 0) {
-          // 从整集转录中提取对应时间段的词
-          const segWords = officialFull.words.filter(
-            (w: { word: string; start: number; end: number }) => w.start >= hz.start_time && w.end <= hz.end_time
+        // Task 3.x: 查任何覆盖了目标时间段的已有转录（官方转录或 warmup 预转录）
+        // findExistingTranscript 查询条件：start_time <= hz.start_time+1 AND end_time >= hz.end_time-1
+        // warmup 保存 [0, 300]，MARK 在前5分钟时可以命中
+        const cachedTranscript = await findExistingTranscript(hz.audio_id, hz.start_time, hz.end_time)
+        if (cachedTranscript && cachedTranscript.words && cachedTranscript.words.length > 0) {
+          // 从缓存转录中提取对应时间段的词
+          const segWords = cachedTranscript.words.filter(
+            (w: { word: string; start: number; end: number }) => w.start >= hz.start_time && w.end <= hz.end_time + 1
           )
           if (segWords.length > 0) {
             text = segWords.map((w: { word: string }) => w.word).join(' ')
             words = segWords
-            transcriptSource = 'official'
+            transcriptSource = cachedTranscript.start_time === 0 ? 'official' : 'groq'
             transcriptConfidence = 100
-            console.log(`[Hotzone] Official transcript hit for ${hz.id}: ${segWords.length} words extracted (${hz.start_time.toFixed(1)}s-${hz.end_time.toFixed(1)}s)`)
+            console.log(`[Hotzone] Cached transcript hit for ${hz.id}: ${segWords.length} words (${hz.start_time.toFixed(1)}s-${hz.end_time.toFixed(1)}s, cache range: ${cachedTranscript.start_time}-${cachedTranscript.end_time}s)`)
             // 跳过 Groq，直接返回
             return {
               ...hz,
@@ -316,17 +317,14 @@ export const processAnchorsToHotzones = async (
               transcript_source: transcriptSource,
               transcript_confidence: transcriptConfidence,
             }
+          } else {
+            console.log(`[Hotzone] Cache found but no words in range ${hz.start_time.toFixed(1)}s-${hz.end_time.toFixed(1)}s (cache has ${cachedTranscript.words.length} words total)`)
           }
         }
 
-        const existing = await findExistingTranscript(hz.audio_id, hz.start_time, hz.end_time);
-        if (existing) {
-            console.log(`[Reuse] Found shared transcript for Hotzone ${hz.id}`);
-            text = existing.text;
-            words = existing.words;
-        } else {
-            console.log(`[API] Transcribing Hotzone ${hz.id}...`);
-            const result = await transcribeAudio(audioSlice);
+        // 缓存未命中，走 Groq 转录
+        console.log(`[API] Transcribing Hotzone ${hz.id}...`)
+        const result = await transcribeAudio(audioSlice);
             text = result.text;
             words = result.words;
 
@@ -359,7 +357,6 @@ export const processAnchorsToHotzones = async (
             if (!saveResult.success) {
                 console.warn(`[Cache] Failed to save transcript for ${hz.id}: ${saveResult.error}`);
             }
-        }
 
         if (words && words.length > 0) {
             const firstWord = words[0];
