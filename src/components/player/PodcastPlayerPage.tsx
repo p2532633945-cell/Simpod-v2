@@ -486,6 +486,99 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
     return () => clearInterval(interval)
   }, [audioId, isPlaying])
 
+  // ============================================
+  // 前瞻式分段预转录
+  // 每播到 10 分钟边界时，后台静默转录下一个 10 分钟段
+  // MARK 时直接命中缓存，实现模式 B 无缝体验
+  // ============================================
+  const preTranscribedSegmentsRef = useRef<Set<string>>(new Set())
+
+  useEffect(() => {
+    // audioId 变化时重置已转录段记录
+    preTranscribedSegmentsRef.current = new Set()
+  }, [audioId])
+
+  useEffect(() => {
+    if (!audioId || !audioUrl || !isPlaying) return
+
+    const SEGMENT_DURATION = 600 // 每段 10 分钟
+    const LOOKAHEAD = 120       // 提前 2 分钟触发
+
+    const interval = setInterval(() => {
+      const audio = audioRef.current
+      if (!audio || audio.duration <= 0) return
+
+      const currentTime = audio.currentTime
+      // 计算当前所在段的下一段起始点
+      const currentSegmentIndex = Math.floor(currentTime / SEGMENT_DURATION)
+      const nextSegmentStart = (currentSegmentIndex + 1) * SEGMENT_DURATION
+      const nextSegmentEnd = Math.min(nextSegmentStart + SEGMENT_DURATION, audio.duration)
+
+      // 距离下一段边界 LOOKAHEAD 秒内，触发预转录
+      const distanceToNextBoundary = nextSegmentStart - currentTime
+      const segmentKey = `${audioId}_${nextSegmentStart}`
+
+      if (
+        distanceToNextBoundary > 0 &&
+        distanceToNextBoundary <= LOOKAHEAD &&
+        nextSegmentStart < audio.duration &&
+        !preTranscribedSegmentsRef.current.has(segmentKey)
+      ) {
+        preTranscribedSegmentsRef.current.add(segmentKey)
+        console.log(`[Player] Pre-transcribing segment: ${nextSegmentStart}s-${nextSegmentEnd}s`)
+
+        fetch('/api/transcribe-segment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            audioUrl,
+            audioId,
+            startTime: nextSegmentStart,
+            endTime: nextSegmentEnd,
+          }),
+        })
+          .then(r => r.json())
+          .then(data => {
+            if (data.cached) {
+              console.log(`[Player] Segment already cached: ${nextSegmentStart}s-${nextSegmentEnd}s`)
+            } else {
+              console.log(`[Player] Segment pre-transcribed: ${nextSegmentStart}s-${nextSegmentEnd}s`)
+            }
+          })
+          .catch(err => console.warn('[Player] Pre-transcription failed:', err))
+      }
+
+      // 同时触发当前段的首次转录（用户刚开始播放时）
+      const currentSegmentStart = currentSegmentIndex * SEGMENT_DURATION
+      const currentSegmentEnd = Math.min(currentSegmentStart + SEGMENT_DURATION, audio.duration)
+      const currentSegmentKey = `${audioId}_${currentSegmentStart}`
+
+      if (
+        currentTime > 10 && // 播放超过 10s 才触发，避免立即触发
+        !preTranscribedSegmentsRef.current.has(currentSegmentKey)
+      ) {
+        preTranscribedSegmentsRef.current.add(currentSegmentKey)
+        console.log(`[Player] Pre-transcribing current segment: ${currentSegmentStart}s-${currentSegmentEnd}s`)
+
+        fetch('/api/transcribe-segment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            audioUrl,
+            audioId,
+            startTime: currentSegmentStart,
+            endTime: currentSegmentEnd,
+          }),
+        })
+          .then(r => r.json())
+          .then(data => console.log(`[Player] Current segment ${data.cached ? 'cache hit' : 'transcribed'}: ${currentSegmentStart}s-${currentSegmentEnd}s`))
+          .catch(err => console.warn('[Player] Pre-transcription failed:', err))
+      }
+    }, 10000) // 每 10 秒检查一次
+
+    return () => clearInterval(interval)
+  }, [audioId, audioUrl, isPlaying])
+
   // canplay 时恢复上次进度（只执行一次，且优先于 startTime）
   // 通过 ref 标记是否已做过进度恢复，避免 handleCanPlay 重复触发
   const progressRestoredRef = useRef(false)
