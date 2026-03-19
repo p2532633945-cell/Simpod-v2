@@ -554,7 +554,7 @@ export function PodcastPlayerPage({ audioId, audioUrl, startTime, autoPlay, epis
       const currentSegmentKey = `${audioId}_${currentSegmentStart}`
 
       if (
-        currentTime > 10 && // 播放超过 10s 才触发，避免立即触发
+        currentTime > 2 && // 播放超过 2s 即触发，尽快开始转录
         !preTranscribedSegmentsRef.current.has(currentSegmentKey)
       ) {
         preTranscribedSegmentsRef.current.add(currentSegmentKey)
