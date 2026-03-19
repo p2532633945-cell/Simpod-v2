@@ -35,11 +35,10 @@ export const sliceRemoteAudio = async (url: string, startTime: number, endTime: 
     let audioContext: AudioContext | null = null;
 
     try {
-        const response = await fetch(proxyUrl, {
-            headers: {
-                'Range': `bytes=${startByte}-${endByte}`
-            }
-        });
+        // startByte=0 时某些服务器对 Range: bytes=0-N 返回空，改为不带偏移直接请求
+        const fetchHeaders: HeadersInit = { 'Range': `bytes=${startByte}-${endByte}` }
+
+        const response = await fetch(proxyUrl, { headers: fetchHeaders });
 
         console.log(`[RemoteSlice] Response status: ${response.status}`);
         if (response.status === 206) {
@@ -53,6 +52,10 @@ export const sliceRemoteAudio = async (url: string, startTime: number, endTime: 
 
         const arrayBuffer = await response.arrayBuffer();
         console.log(`[RemoteSlice] Downloaded ${(arrayBuffer.byteLength / 1024).toFixed(0)}KB.`);
+
+        if (arrayBuffer.byteLength === 0) {
+          throw new Error(`Audio proxy returned empty response (status: ${response.status}, url: ${url.slice(0, 80)})`)
+        }
 
         // 从对象池获取 AudioContext
         const pool = getAudioContextPool();
