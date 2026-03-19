@@ -117,6 +117,44 @@ export default function PodcastPage() {
           }
         }
 
+        // 阶段 1 预转录：对最新 3 集，后台静默转录前 5 分钟
+        // 用户进剧集列表时触发，播放时大概率命中缓存（冷启动窗口从 60s → 0s）
+        const toWarmup = result.episodes
+          .filter(ep => ep.audioUrl && !ep.officialTranscript?.url) // 没有官方转录的才需要预转录
+          .slice(0, 3)
+        if (toWarmup.length > 0) {
+          console.log(`[Warmup] Pre-transcribing first 5min of ${toWarmup.length} episodes...`)
+          // 串行执行，避免并发请求打爆 Groq API
+          ;(async () => {
+            for (const ep of toWarmup) {
+              try {
+                const res = await fetch('/api/transcribe-segment', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    audioUrl: ep.audioUrl,
+                    audioId: ep.id,
+                    startTime: 0,
+                    endTime: 300, // 前 5 分钟
+                  }),
+                })
+                const data = await res.json()
+                if (data.cached) {
+                  console.log(`[Warmup] Already cached: ${ep.id}`)
+                } else if (data.success) {
+                  console.log(`[Warmup] Pre-transcribed: ${ep.id} (${data.wordCount} words)`)
+                } else {
+                  console.warn(`[Warmup] Failed: ${ep.id}`, data.error)
+                }
+                // 每集间隔 2s，避免并发
+                await new Promise(r => setTimeout(r, 2000))
+              } catch (err) {
+                console.warn(`[Warmup] Error for ${ep.id}:`, err)
+              }
+            }
+          })()
+        }
+
       } catch (err: any) {
         console.error('[Podcast Page] Error:', err)
         setError(err.message || 'Failed to load podcast')
