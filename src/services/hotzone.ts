@@ -272,34 +272,18 @@ export const processAnchorsToHotzones = async (
   console.log(`Starting batch transcription for ${mergedNewHotzones.length} NEW hotzones...`);
 
   const processedNewHotzones = await Promise.all(mergedNewHotzones.map(async (hz) => {
-    // ... (Keep existing transcription logic for new zones)
-    // Reuse: exact same logic block as before
     try {
-      let audioSlice: Blob;
-
-      if (audioFile) {
-          audioSlice = await sliceAudio(audioFile, hz.start_time, hz.end_time);
-      } else if (audioUrl && typeof audioUrl === 'string' && audioUrl.startsWith('http')) {
-          console.log(`[Hotzone] Slicing remote audio: ${audioUrl}`);
-          audioSlice = await sliceRemoteAudio(audioUrl, hz.start_time, hz.end_time);
-      } else {
-          const match = transcript?.find(t => t.start_time <= hz.start_time && t.end_time >= hz.end_time);
-          if (match) return { ...hz, transcript_snippet: match.text };
-          return { ...hz, transcript_snippet: "[Audio source missing for transcription]" };
-      }
-
       let text = hz.transcript_snippet;
       let words: Array<{ word: string; start: number; end: number }> | undefined = undefined;
       let transcriptSource: 'official' | 'groq' | 'user' = 'groq';
       let transcriptConfidence: number = 100;
 
+      // ============================================
+      // 先查缓存，命中则跳过音频下载（关键性能优化）
+      // ============================================
       if (!text || text === "Processing...") {
-        // Task 3.x: 查任何覆盖了目标时间段的已有转录（官方转录或 warmup 预转录）
-        // findExistingTranscript 查询条件：start_time <= hz.start_time+1 AND end_time >= hz.end_time-1
-        // warmup 保存 [0, 300]，MARK 在前5分钟时可以命中
         const cachedTranscript = await findExistingTranscript(hz.audio_id, hz.start_time, hz.end_time)
         if (cachedTranscript && cachedTranscript.words && cachedTranscript.words.length > 0) {
-          // 从缓存转录中提取对应时间段的词
           const allWordTimes = cachedTranscript.words.map((w: { start: number; end: number }) => w.start)
           const minWordTime = Math.min(...allWordTimes)
           const maxWordTime = Math.max(...allWordTimes)
@@ -313,7 +297,6 @@ export const processAnchorsToHotzones = async (
             transcriptSource = cachedTranscript.start_time === 0 ? 'official' : 'groq'
             transcriptConfidence = 100
             console.log(`[Hotzone] Cached transcript hit for ${hz.id}: ${segWords.length} words (${hz.start_time.toFixed(1)}s-${hz.end_time.toFixed(1)}s, cache range: ${cachedTranscript.start_time}-${cachedTranscript.end_time}s)`)
-            // 跳过 Groq，直接返回
             return {
               ...hz,
               transcript_snippet: text,
@@ -325,79 +308,83 @@ export const processAnchorsToHotzones = async (
             console.log(`[Hotzone] Cache found but no words in range ${hz.start_time.toFixed(1)}s-${hz.end_time.toFixed(1)}s (cache has ${cachedTranscript.words.length} words total)`)
           }
         }
+      }
 
+      // 缓存未命中，下载音频并转录
+      let audioSlice: Blob;
+      if (audioFile) {
+          audioSlice = await sliceAudio(audioFile, hz.start_time, hz.end_time);
+      } else if (audioUrl && typeof audioUrl === 'string' && audioUrl.startsWith('http')) {
+          console.log(`[Hotzone] Slicing remote audio: ${audioUrl}`);
+          audioSlice = await sliceRemoteAudio(audioUrl, hz.start_time, hz.end_time);
+      } else {
+          const match = transcript?.find(t => t.start_time <= hz.start_time && t.end_time >= hz.end_time);
+          if (match) return { ...hz, transcript_snippet: match.text };
+          return { ...hz, transcript_snippet: "[Audio source missing for transcription]" };
+      }
+
+      if (!text || text === "Processing...") {
         // 缓存未命中，走 Groq 转录
         console.log(`[API] Transcribing Hotzone ${hz.id}...`)
         const result = await transcribeAudio(audioSlice);
-            text = result.text;
-            words = result.words;
+        text = result.text;
+        words = result.words;
 
-            // P6-1.2: Multi-model transcription comparison
-            // 策略：如果配置了 OPENAI_API_KEY 则进行真实对比，否则用启发式算法估算置信度
-            const hasOpenAI = typeof process !== 'undefined' && !!process.env?.OPENAI_API_KEY;
-            if (hasOpenAI) {
-              try {
-                console.log(`[Hotzone] Starting multi-model comparison for ${hz.id}...`);
-                const audioBuffer = await audioSlice.arrayBuffer();
-                const openaiText = await transcribeWithOpenAI(audioBuffer);
-                const { similarity, confidence, needsReview } = compareTranscriptions(text, openaiText);
-                transcriptConfidence = confidence;
-                console.log(`[Hotzone] Multi-model result: similarity=${similarity}%, confidence=${confidence}%, needsReview=${needsReview}`);
-                if (needsReview) {
-                  console.warn(`[Hotzone] Low confidence (${confidence}%) - marked for manual review`);
-                }
-              } catch (err) {
-                const message = err instanceof Error ? err.message : 'Unknown error';
-                console.warn(`[Hotzone] OpenAI comparison failed, falling back to heuristic:`, message);
-                transcriptConfidence = estimateConfidenceFromText(text);
-              }
-            } else {
-              // 无 OpenAI Key：用启发式算法估算置信度（基于转录文本质量）
-              transcriptConfidence = estimateConfidenceFromText(text);
-              console.log(`[Hotzone] Heuristic confidence for ${hz.id}: ${transcriptConfidence}%`);
+        // P6-1.2: Multi-model transcription comparison
+        const hasOpenAI = typeof process !== 'undefined' && !!process.env?.OPENAI_API_KEY;
+        if (hasOpenAI) {
+          try {
+            console.log(`[Hotzone] Starting multi-model comparison for ${hz.id}...`);
+            const audioBuffer = await audioSlice.arrayBuffer();
+            const openaiText = await transcribeWithOpenAI(audioBuffer);
+            const { similarity, confidence, needsReview } = compareTranscriptions(text, openaiText);
+            transcriptConfidence = confidence;
+            console.log(`[Hotzone] Multi-model result: similarity=${similarity}%, confidence=${confidence}%, needsReview=${needsReview}`);
+            if (needsReview) {
+              console.warn(`[Hotzone] Low confidence (${confidence}%) - marked for manual review`);
             }
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Unknown error';
+            console.warn(`[Hotzone] OpenAI comparison failed, falling back to heuristic:`, message);
+            transcriptConfidence = estimateConfidenceFromText(text);
+          }
+        } else {
+          transcriptConfidence = estimateConfidenceFromText(text);
+          console.log(`[Hotzone] Heuristic confidence for ${hz.id}: ${transcriptConfidence}%`);
+        }
 
-            const saveResult = await saveTranscript(hz.audio_id, hz.start_time, hz.end_time, text, words);
-            if (!saveResult.success) {
-                console.warn(`[Cache] Failed to save transcript for ${hz.id}: ${saveResult.error}`);
-            }
-
-        if (words && words.length > 0) {
-            const firstWord = words[0];
-            const lastWord = words[words.length - 1];
-
-            // P0-2 优化：根据转录词实际时长动态调整热区时间范围
-            // 在原始切片时间基础上加上词的相对偏移，并加前后各 2s buffer
-            const BUFFER = 2;
-            const transcriptRelativeStart = firstWord.start;
-            const transcriptRelativeEnd = lastWord.end;
-
-            // 以锚点附近开始（含 buffer）而非纯机械 ±10s
-            const newStartTime = Math.max(0, hz.start_time + transcriptRelativeStart - BUFFER);
-            const newEndTime = hz.start_time + transcriptRelativeEnd + BUFFER;
-
-            console.log(`[P0-2] Refined ${hz.id}: [${hz.start_time.toFixed(2)}, ${hz.end_time.toFixed(2)}] -> [${newStartTime.toFixed(2)}, ${newEndTime.toFixed(2)}] (transcript duration: ${(transcriptRelativeEnd - transcriptRelativeStart).toFixed(2)}s)`);
-
-            return {
-                ...hz,
-                start_time: newStartTime,
-                end_time: newEndTime,
-                transcript_snippet: text,
-                transcript_words: words.map(w => ({
-                        ...w,
-                        start: hz.start_time + w.start,
-                        end: hz.start_time + w.end
-                })),
-                transcript_source: transcriptSource,
-                transcript_confidence: transcriptConfidence,
-                metadata: {
-                    ...hz.metadata,
-                }
-            };
+        const saveResult = await saveTranscript(hz.audio_id, hz.start_time, hz.end_time, text, words);
+        if (!saveResult.success) {
+          console.warn(`[Cache] Failed to save transcript for ${hz.id}: ${saveResult.error}`);
         }
       }
-      return { 
-        ...hz, 
+
+      if (words && words.length > 0) {
+        const firstWord = words[0];
+        const lastWord = words[words.length - 1];
+        const BUFFER = 2;
+        const transcriptRelativeStart = firstWord.start;
+        const transcriptRelativeEnd = lastWord.end;
+        const newStartTime = Math.max(0, hz.start_time + transcriptRelativeStart - BUFFER);
+        const newEndTime = hz.start_time + transcriptRelativeEnd + BUFFER;
+        console.log(`[P0-2] Refined ${hz.id}: [${hz.start_time.toFixed(2)}, ${hz.end_time.toFixed(2)}] -> [${newStartTime.toFixed(2)}, ${newEndTime.toFixed(2)}] (transcript duration: ${(transcriptRelativeEnd - transcriptRelativeStart).toFixed(2)}s)`);
+        return {
+          ...hz,
+          start_time: newStartTime,
+          end_time: newEndTime,
+          transcript_snippet: text,
+          transcript_words: words.map(w => ({
+            ...w,
+            start: hz.start_time + w.start,
+            end: hz.start_time + w.end
+          })),
+          transcript_source: transcriptSource,
+          transcript_confidence: transcriptConfidence,
+          metadata: { ...hz.metadata },
+        };
+      }
+      return {
+        ...hz,
         transcript_snippet: text,
         transcript_source: transcriptSource,
         transcript_confidence: transcriptConfidence
