@@ -174,3 +174,23 @@
 转录触发逻辑：
   用户 MARK
     → 查  transcripts 表（audio_id + 时间范围）`n    → 命中 → 直接返回（0 API 调用）`n    → 未命中 → Groq 转录 → 存入 transcripts 表`n    → 下次任何用户 MARK 同一段 → 复用`n`n预转录策略：`n  剧集 duration ≤ 30min`n    → 用户首次播放时后台触发全量转录`n    → 成本 $0.056/集（¥0.40）`n    → 存入 transcripts 表，永久复用`n`n官方转录策略：`n  剧集列表加载`n    → 检测 podcast:transcript RSS 标签`n    → 后台静默下载 VTT/SRT`n    → 解析存入 transcripts 表`n    → MARK 时零 API 调用，零延迟`n```
+
+
+---
+
+## Week 4 预告
+
+**定位智能优化**：
+- 语义搜索（向量化，理解意图而非关键词）
+- 上下文推荐（查看热区时推荐相关热区）
+- Taddy API 集成（覆盖主流英文播客 40-60%，免费，响应 ~200ms）
+
+**语音控制（Week 4 支线）**：
+- 方案 A P1：语音定位 — 说出关键词跳转，Web Speech API（免费），Task 3.6 后集成
+- 方案 B P0 付费卖点：AI 问答助手 — 理解热区内容，GPT-4o-mini，每次 <0.01元，Pro 专属
+- 方案 C P2 后期：语音唤醒词 MARK，需解决隐私和耗电，用户量>500后评估
+
+**数据源扩展时机提醒**：
+- 现在可做：Taddy API（Task 3.2 后集成）
+- 用户量>500：Podscribe.ai（/月，Top5000英文播客全文，可批量存DB）
+- 用户量>1000：AssemblyAI（.37/小时，说话人识别+章节，Pro专属）
