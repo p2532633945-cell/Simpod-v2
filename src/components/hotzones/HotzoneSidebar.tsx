@@ -7,7 +7,7 @@
  */
 
 import { useState, useMemo, useCallback } from "react"
-import { Check, Clock, Archive, Filter, Edit2, Play } from "lucide-react"
+import { Check, Clock, Filter, Edit2, Play, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { HotzoneSidebarProps, Hotzone, HotzoneFilter } from "@/types/simpod"
 import { formatTime } from "@/lib/mock-data"
@@ -19,8 +19,7 @@ import { usePlayerStore } from "@/stores/playerStore"
 const FILTER_OPTIONS: { value: HotzoneFilter; label: string; icon: React.ReactNode }[] = [
   { value: "all", label: "All", icon: <Filter size={14} /> },
   { value: "pending", label: "Pending", icon: <Clock size={14} /> },
-  { value: "reviewed", label: "Reviewed", icon: <Check size={14} /> },
-  { value: "archived", label: "Archived", icon: <Archive size={14} /> },
+  { value: "reviewed", label: "Saved", icon: <Check size={14} /> },
 ]
 
 export function HotzoneSidebar({
@@ -35,15 +34,10 @@ export function HotzoneSidebar({
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const { updateHotzone: updateHotzoneInStore } = usePlayerStore()
 
-  // 切换热区状态（pending → reviewed → archived → pending）
+  // 切换热区状态（pending ↔ reviewed）
   const handleToggleStatus = useCallback(async (hotzone: Hotzone, e: React.MouseEvent) => {
     e.stopPropagation()
-    const nextStatus: Record<string, 'pending' | 'reviewed' | 'archived'> = {
-      pending: 'reviewed',
-      reviewed: 'archived',
-      archived: 'pending',
-    }
-    const newStatus = nextStatus[hotzone.status] || 'pending'
+    const newStatus = hotzone.status === 'reviewed' ? 'pending' : 'reviewed'
     try {
       await updateHotzoneStatus(hotzone.id, newStatus)
       updateHotzoneInStore(hotzone.id, { status: newStatus })
@@ -53,6 +47,22 @@ export function HotzoneSidebar({
       console.error('[HotzoneSidebar] Failed to update status:', err)
     }
   }, [updateHotzoneInStore, onHotzoneToggleReviewed])
+
+  // 删除热区
+  const handleDelete = useCallback(async (hotzone: Hotzone, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!confirm('Delete this hotzone?')) return
+    try {
+      const res = await fetch(`/api/hotzones?id=${hotzone.id}`, { method: 'DELETE' })
+      if (res.ok) {
+        const { removeHotzone } = usePlayerStore.getState()
+        removeHotzone(hotzone.id)
+        console.log('[HotzoneSidebar] Hotzone deleted:', hotzone.id)
+      }
+    } catch (err) {
+      console.error('[HotzoneSidebar] Failed to delete hotzone:', err)
+    }
+  }, [])
 
   // 过滤热区
   const filteredHotzones = useMemo(() => {
@@ -66,7 +76,6 @@ export function HotzoneSidebar({
       all: hotzones.length,
       pending: hotzones.filter((hz) => hz.status === "pending").length,
       reviewed: hotzones.filter((hz) => hz.status === "reviewed").length,
-      archived: hotzones.filter((hz) => hz.status === "archived").length,
     }
   }, [hotzones])
 
@@ -139,12 +148,11 @@ export function HotzoneSidebar({
 
             {/* Compact filter icon-buttons */}
             <div className="flex items-center gap-0.5 bg-secondary/50 rounded-lg p-0.5">
-              {([
-                { value: 'all' as HotzoneFilter, icon: <Filter size={13} />, title: `All (${counts.all})` },
-                { value: 'pending' as HotzoneFilter, icon: <Clock size={13} />, title: `Pending (${counts.pending})` },
-                { value: 'reviewed' as HotzoneFilter, icon: <Check size={13} />, title: `Reviewed (${counts.reviewed})` },
-                { value: 'archived' as HotzoneFilter, icon: <Archive size={13} />, title: `Archived (${counts.archived})` },
-              ]).map(({ value, icon, title }) => (
+              {([  
+              { value: 'all' as HotzoneFilter, icon: <Filter size={13} />, title: `All (${counts.all})` },
+              { value: 'pending' as HotzoneFilter, icon: <Clock size={13} />, title: `Pending (${counts.pending})` },
+              { value: 'reviewed' as HotzoneFilter, icon: <Check size={13} />, title: `Saved (${counts.reviewed})` },
+            ]).map(({ value, icon, title }) => (
                 <button
                   key={value}
                   onClick={() => setFilter(value)}
@@ -158,14 +166,13 @@ export function HotzoneSidebar({
                 >
                   {icon}
                   {/* Badge */}
-                  {(value !== 'all' ? counts[value] : 0) > 0 && (
+                  {(value !== 'all' ? (counts as Record<string, number>)[value] ?? 0 : 0) > 0 && (
                     <span className={cn(
                       "absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] rounded-full text-[9px] font-bold flex items-center justify-center px-0.5",
                       value === 'pending' ? "bg-amber-500 text-white" :
-                      value === 'reviewed' ? "bg-green-500 text-white" :
-                      "bg-muted-foreground/50 text-white"
+                      "bg-green-500 text-white"
                     )}>
-                      {counts[value]}
+                      {(counts as Record<string, number>)[value]}
                     </span>
                   )}
                 </button>
@@ -203,6 +210,7 @@ export function HotzoneSidebar({
                   onClick={() => handleHotzoneClick(hotzone)}
                   onToggleStatus={(e) => handleToggleStatus(hotzone, e)}
                   onEdit={() => handleEditClick(hotzone)}
+                  onDelete={(e) => handleDelete(hotzone, e)}
                 />
               ))}
             </div>
@@ -237,12 +245,14 @@ function HotzoneCard({
   onClick,
   onToggleStatus,
   onEdit,
+  onDelete,
 }: {
   hotzone: Hotzone
   isSelected: boolean
   onClick: () => void
   onToggleStatus: (e: React.MouseEvent) => void
   onEdit: () => void
+  onDelete: (e: React.MouseEvent) => void
 }) {
   const statusConfig = {
     pending: {
@@ -250,20 +260,20 @@ function HotzoneCard({
       bg: "bg-amber-500/10",
       border: "border-amber-500/20",
       icon: <Clock size={11} />,
-      next: "→ reviewed",
+      next: "→ saved",
     },
     reviewed: {
       color: "text-green-400",
       bg: "bg-green-500/10",
       border: "border-green-500/20",
       icon: <Check size={11} />,
-      next: "→ archived",
+      next: "→ pending",
     },
     archived: {
       color: "text-muted-foreground",
       bg: "bg-muted/30",
       border: "border-border",
-      icon: <Archive size={11} />,
+      icon: <Check size={11} />,
       next: "→ pending",
     },
   }
@@ -315,6 +325,15 @@ function HotzoneCard({
             title="Edit"
           >
             <Edit2 size={12} />
+          </button>
+          {/* Delete button */}
+          <button
+            onClick={onDelete}
+            className="p-1 rounded text-muted-foreground/50 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+            aria-label="Delete hotzone"
+            title="Delete"
+          >
+            <Trash2 size={12} />
           </button>
         </div>
       </div>

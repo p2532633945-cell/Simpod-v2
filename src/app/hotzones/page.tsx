@@ -13,7 +13,7 @@ import {
   Filter,
   Clock,
   Check,
-  Archive,
+  Trash2,
   Play,
   Flame,
   CheckCheck,
@@ -34,8 +34,7 @@ import { TranscriptSearch } from "@/components/transcript/TranscriptSearch"
 const FILTER_OPTIONS: { value: HotzoneFilter; label: string; icon: React.ReactNode }[] = [
   { value: "all", label: "All", icon: <Filter size={14} /> },
   { value: "pending", label: "Pending", icon: <Clock size={14} /> },
-  { value: "reviewed", label: "Reviewed", icon: <Check size={14} /> },
-  { value: "archived", label: "Archived", icon: <Archive size={14} /> },
+  { value: "reviewed", label: "Saved", icon: <Check size={14} /> },
 ]
 
 export default function HotzonesPage() {
@@ -134,15 +133,31 @@ export default function HotzonesPage() {
   }, [])
 
   const handleBatchReview = useCallback(async () => {
-    await Promise.all(Array.from(selectedIds).map((id) => updateHotzoneStatus(id, "reviewed").catch(() => null)))
-    setHotzones((prev) => prev.map((hz) => selectedIds.has(hz.id) ? { ...hz, status: "reviewed" } : hz))
-    setSelectedIds(new Set())
+    const ids = Array.from(selectedIds)
+    setUpdatingIds(new Set(ids))
+    try {
+      await Promise.all(ids.map((id) => updateHotzoneStatus(id, "reviewed").catch(() => null)))
+      setHotzones((prev) => prev.map((hz) => selectedIds.has(hz.id) ? { ...hz, status: "reviewed" } : hz))
+    } finally {
+      setUpdatingIds(new Set())
+      setSelectedIds(new Set())
+    }
   }, [selectedIds])
 
-  const handleBatchArchive = useCallback(async () => {
-    await Promise.all(Array.from(selectedIds).map((id) => updateHotzoneStatus(id, "archived").catch(() => null)))
-    setHotzones((prev) => prev.map((hz) => selectedIds.has(hz.id) ? { ...hz, status: "archived" } : hz))
-    setSelectedIds(new Set())
+  // 批量删除
+  const handleBatchDelete = useCallback(async () => {
+    if (!confirm(`Delete ${selectedIds.size} hotzone(s)? This cannot be undone.`)) return
+    const ids = Array.from(selectedIds)
+    setUpdatingIds(new Set(ids))
+    try {
+      await Promise.all(ids.map((id) =>
+        fetch(`/api/hotzones?id=${id}`, { method: 'DELETE' }).catch(() => null)
+      ))
+      setHotzones((prev) => prev.filter((hz) => !selectedIds.has(hz.id)))
+    } finally {
+      setUpdatingIds(new Set())
+      setSelectedIds(new Set())
+    }
   }, [selectedIds])
 
   // P5-7: 保存转录编辑
@@ -153,6 +168,20 @@ export default function HotzonesPage() {
         ? { ...hz, transcript_snippet: newText, metadata: { ...hz.metadata, description: note } }
         : hz
     ))
+  }, [])
+
+  // 单个删除
+  const handleDeleteHotzone = useCallback(async (hotzoneId: string) => {
+    if (!confirm('Delete this hotzone? This cannot be undone.')) return
+    setUpdatingIds(prev => new Set(prev).add(hotzoneId))
+    try {
+      const res = await fetch(`/api/hotzones?id=${hotzoneId}`, { method: 'DELETE' })
+      if (res.ok) {
+        setHotzones(prev => prev.filter(hz => hz.id !== hotzoneId))
+      }
+    } finally {
+      setUpdatingIds(prev => { const next = new Set(prev); next.delete(hotzoneId); return next })
+    }
   }, [])
 
   const isAllSelected = filteredHotzones.length > 0 && selectedIds.size === filteredHotzones.length
@@ -241,8 +270,14 @@ export default function HotzonesPage() {
                 </button>
                 {selectedIds.size > 0 && (
                   <>
-                    <button onClick={handleBatchReview} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm bg-green-500/10 text-green-500 hover:bg-green-500/20"><CheckCheck size={14} />Review ({selectedIds.size})</button>
-                    <button onClick={handleBatchArchive} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm bg-secondary text-foreground hover:bg-secondary/80"><Archive size={14} />Archive</button>
+                    <button onClick={handleBatchReview} disabled={updatingIds.size > 0} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm bg-green-500/10 text-green-500 hover:bg-green-500/20 disabled:opacity-50">
+                      {updatingIds.size > 0 ? <Loader2 size={14} className="animate-spin" /> : <CheckCheck size={14} />}
+                      Save ({selectedIds.size})
+                    </button>
+                    <button onClick={handleBatchDelete} disabled={updatingIds.size > 0} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm bg-red-500/10 text-red-500 hover:bg-red-500/20 disabled:opacity-50">
+                      {updatingIds.size > 0 ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                      Delete ({selectedIds.size})
+                    </button>
                   </>
                 )}
               </div>
@@ -259,6 +294,7 @@ export default function HotzonesPage() {
                       onSelect={() => handleSelect(hotzone.id)}
                       onJump={() => handleHotzoneJump(hotzone.id, hotzone.start_time)}
                       onStatusChange={(status: 'pending' | 'reviewed' | 'archived') => handleToggleStatus(hotzone.id, status)}
+                      onDelete={() => handleDeleteHotzone(hotzone.id)}
                       onTranscriptSave={handleTranscriptSave}
                     />
                   ))}
@@ -292,18 +328,18 @@ export default function HotzonesPage() {
   )
 }
 
-function HotzoneCard({ hotzone, isSelected, isUpdating, onSelect, onJump, onStatusChange, onTranscriptSave }: {
+function HotzoneCard({ hotzone, isSelected, isUpdating, onSelect, onJump, onStatusChange, onDelete, onTranscriptSave }: {
   hotzone: Hotzone
   isSelected: boolean
   isUpdating: boolean
   onSelect: () => void
   onJump: () => void
   onStatusChange: (status: 'pending' | 'reviewed' | 'archived') => void
+  onDelete: () => void
   onTranscriptSave: (hotzoneId: string, text: string, note: string) => Promise<void>
 }) {
   const isPending = hotzone.status === 'pending'
   const isReviewed = hotzone.status === 'reviewed'
-  const isArchived = hotzone.status === 'archived'
 
   return (
     <div className={cn("p-4 rounded-xl border transition-all", isSelected ? "bg-simpod-mark/5 border-simpod-mark/30" : "bg-card border-border hover:border-simpod-mark/20")}>
@@ -323,12 +359,12 @@ function HotzoneCard({ hotzone, isSelected, isUpdating, onSelect, onJump, onStat
               isPending ? "bg-amber-500" : isReviewed ? "bg-green-500" : "bg-muted-foreground/40"
             )} title={hotzone.status} />
           </div>
-          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-mono text-simpod-primary">
               {formatTime(hotzone.start_time)} – {formatTime(hotzone.end_time)}
             </span>
-            {/* 直接 Review / Unmark 按钮 */}
-            {!isArchived ? (
+            <div className="flex items-center gap-1.5">
+              {/* Save / Unsave 按钮 */}
               <button
                 onClick={() => onStatusChange(isReviewed ? 'pending' : 'reviewed')}
                 disabled={isUpdating}
@@ -344,17 +380,18 @@ function HotzoneCard({ hotzone, isSelected, isUpdating, onSelect, onJump, onStat
                   ? <Loader2 size={12} className="animate-spin" />
                   : <Check size={12} />
                 }
-                {isReviewed ? 'Reviewed' : 'Mark reviewed'}
+                {isReviewed ? 'Saved' : 'Save'}
               </button>
-            ) : (
+              {/* Delete 按钮 */}
               <button
-                onClick={() => onStatusChange('pending')}
+                onClick={onDelete}
                 disabled={isUpdating}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-all disabled:opacity-50"
+                title="Delete hotzone"
               >
-                <RotateCcw size={12} /> Restore
+                <Trash2 size={12} />
               </button>
-            )}
+            </div>
           </div>
 
           {/* P5-7: 转录编辑器 */}
