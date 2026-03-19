@@ -194,3 +194,4 @@
 - 现在可做：Taddy API（Task 3.2 后集成）
 - 用户量>500：Podscribe.ai（/月，Top5000英文播客全文，可批量存DB）
 - 用户量>1000：AssemblyAI（.37/小时，说话人识别+章节，Pro专属）
+
